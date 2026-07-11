@@ -399,6 +399,9 @@ ExeInitRegistry(VOID)
     /* ---- ntdll.dll — Nt* syscalls + Rtl* runtime + Ldr* loader ---- */
     NtdllRegisterExports();
 
+    /* ---- user32.dll — window mgmt + message pump + input ---- */
+    User32RegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

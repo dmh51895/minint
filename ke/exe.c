@@ -417,6 +417,9 @@ ExeInitRegistry(VOID)
     /* ---- d3dcompiler_47.dll — HLSL shader compiler ---- */
     D3dCompilerRegisterExports();
 
+    /* ---- shell32.dll — shell paths + file operations ---- */
+    Shell32RegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

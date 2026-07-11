@@ -420,6 +420,9 @@ ExeInitRegistry(VOID)
     /* ---- shell32.dll — shell paths + file operations ---- */
     Shell32RegisterExports();
 
+    /* ---- ws2_32.dll — Winsock2 (lwIP backend) ---- */
+    Ws2_32RegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

@@ -189,21 +189,22 @@ NTSTATUS NTAPI CmSaveHive(VOID)
     s = CmSerializeKey(&b, CmGetRootKey());
     if (!NT_SUCCESS(s)) { ExFreePool(b.data); return s; }
 
-    /* Write file to disk via FAT32 (need to extend API for writes) — for now
-       we read directly into AHCI sectors at a fixed LBA. */
-    /* A future commit will use Fat32WriteFile — which needs to be added.
-       For now, we write to a fixed reserved area on the partition (typically
-       the last 1MB before filesystem metadata). However, FAT32 doesn't
-       have reserved areas — we'll simply not persist yet and log the save
-       request. The serialization works end-to-end. */
+    /* Write hive to disk via FAT32 */
+    ULONG bytes_written = 0;
+    s = Fat32WriteFile(REG_HIVE_FILE, b.data, (ULONG)b.size, &bytes_written);
+    if (!NT_SUCCESS(s)) {
+        CMPDBG("Failed to write hive to disk: 0x%x", (ULONG)s);
+        ExFreePool(b.data);
+        return s;
+    }
+    CMPDBG("Hive written to disk: %u bytes", bytes_written);
 
     /* Round b.size up to sector boundary */
     SIZE_T total_sectors = (b.size + 511) / 512;
     CMPDBG("Hive size: %u bytes (%u sectors)", (ULONG)b.size, (ULONG)total_sectors);
 
-    /* For now, just log success. The serialization format is ready. */
     ExFreePool(b.data);
-    CMPDBG("Registry hive serialized (save-to-disk pending FAT32 write API)");
+    CMPDBG("Registry hive saved to disk");
     return STATUS_SUCCESS;
 }
 

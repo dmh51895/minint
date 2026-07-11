@@ -25,6 +25,7 @@ OBJS := boot/mbentry.o \
          ke/trap.o ke/ctxswap.o ke/idt.o ke/irql.o ke/bugcheck.o ke/dispatch.o \
           ke/syscall.o ke/services.o ke/pe.o ke/exe.o ke/exports/kernel32_exports.o ke/exports/ntdll_exports.o ke/exports/user32_exports.o ke/exports/gdi32_exports.o ke/exports/advapi32_exports.o ke/exports/ole32_exports.o \
          hal/hal.o hal/fb.o hal/kbd.o hal/mouse.o hal/mb2fb.o rtl/rtl.o rtl/rtlsupp.o \
+          drivers/ata/ahci.o \
          mm/mminit.o mm/mmuser.o \
          ex/pool.o ob/obmgr.o ps/psmgr.o \
          io/iomgr.o cm/cm.o se/se.o fs/fs.o lpc/lpc.o \

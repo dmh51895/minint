@@ -26,6 +26,7 @@
 #include <rtw/rtw_usb.h>
 #include "../win32k/d3d12/d3d12.h"
 #include <nt/exe.h>
+#include <nt/ahci.h>
 
 extern NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
 
@@ -191,6 +192,13 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
 
     /* USB */
     status = UsbInitSystem();
+
+    /* AHCI — SATA disk controller */
+    status = AhciInitSystem();
+    if (NT_SUCCESS(status))
+        DbgPrint("AHCI: subsystem ready\n");
+    else
+        DbgPrint("AHCI: no controller found (non-fatal)\n");
     if (NT_SUCCESS(status))
         DbgPrint("USB: subsystem ready\n");
     else

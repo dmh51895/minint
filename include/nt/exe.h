@@ -63,4 +63,23 @@ NTSTATUS NTAPI ExeLaunch(
  */
 VOID NTAPI ExeInitRegistry(VOID);
 
+/* Per-DLL registration functions (called by ExeInitRegistry) */
+VOID NTAPI Kernel32RegisterExports(VOID);
+
+/* Export table access (for GetProcAddress implementation) */
+extern PVOID NTAPI ExeResolveExport(const CHAR *DllName, const CHAR *FuncName);
+
+/* Case-insensitive string compare used across export files */
+int SwStrICmp(const CHAR *a, const CHAR *b);
+
+/* Export table globals (accessible from export registration files) */
+#define MAX_EXPORTS 256
+typedef struct _DLL_EXPORT_ENTRY {
+    const CHAR *DllName;
+    const CHAR *FuncName;
+    PVOID       FuncPtr;
+} DLL_EXPORT_ENTRY;
+extern DLL_EXPORT_ENTRY g_ExportTable[];
+extern ULONG g_ExportCount;
+
 #endif /* _EXE_H_ */

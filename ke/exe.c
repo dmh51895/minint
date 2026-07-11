@@ -33,21 +33,13 @@
  * A hash table would be faster but the total number of exports is small
  * (< 200) so a linear scan with _stricmp is perfectly adequate.
  * ========================================================================== */
-
-#define MAX_EXPORTS 256
-
-typedef struct _DLL_EXPORT_ENTRY {
-    const CHAR *DllName;     /* e.g. "d3d12.dll" — statically allocated */
-    const CHAR *FuncName;    /* e.g. "D3D12CreateDevice" — statically allocated */
-    PVOID       FuncPtr;     /* __attribute__((ms_abi)) function pointer */
-} DLL_EXPORT_ENTRY;
-
-static DLL_EXPORT_ENTRY g_ExportTable[MAX_EXPORTS];
-static ULONG g_ExportCount = 0;
+/* MAX_EXPORTS, DLL_EXPORT_ENTRY type come from exe.h */
+DLL_EXPORT_ENTRY g_ExportTable[MAX_EXPORTS];
+ULONG g_ExportCount = 0;
 
 /* ---- Case-insensitive string compare (kernel has no _stricmp) ------------- */
 
-static int SwStrICmp(const CHAR *a, const CHAR *b)
+int SwStrICmp(const CHAR *a, const CHAR *b)
 {
     while (*a && *b) {
         CHAR ca = *a, cb = *b;
@@ -395,44 +387,16 @@ ExeInitRegistry(VOID)
     REG("d3d12.dll", "D3D12CreateDevice",      D3D12CreateDevice_msabi);
     REG("d3d12.dll", "D3D12GetDebugInterface", D3D12GetDebugInterface_msabi);
 
-    /* ---- kernel32.dll ---- */
-    REG("kernel32.dll", "GetTickCount",                  GetTickCount_msabi);
-    REG("kernel32.dll", "QueryPerformanceCounter",       QueryPerformanceCounter_msabi);
-    REG("kernel32.dll", "QueryPerformanceFrequency",     QueryPerformanceFrequency_msabi);
-    REG("kernel32.dll", "GetModuleHandleA",              GetModuleHandleA_msabi);
-    REG("kernel32.dll", "GetProcAddress",                GetProcAddress_msabi);
-    REG("kernel32.dll", "LoadLibraryA",                  LoadLibraryA_msabi);
-    REG("kernel32.dll", "FreeLibrary",                   FreeLibrary_msabi);
-    REG("kernel32.dll", "GetConsoleWindow",              GetConsoleWindow_msabi);
-    REG("kernel32.dll", "Sleep",                         Sleep_msabi);
-    REG("kernel32.dll", "GetLastError",                  GetLastError_msabi);
-    REG("kernel32.dll", "SetLastError",                  SetLastError_msabi);
-    REG("kernel32.dll", "CreateEventA",                  CreateEventA_msabi);
-    REG("kernel32.dll", "WaitForSingleObject",           WaitForSingleObject_msabi);
-    REG("kernel32.dll", "OutputDebugStringA",            OutputDebugStringA_msabi);
-    REG("kernel32.dll", "GetProcessHeap",                GetProcessHeap_msabi);
-    REG("kernel32.dll", "HeapAlloc",                     HeapAlloc_msabi);
-    REG("kernel32.dll", "HeapFree",                      HeapFree_msabi);
-    REG("kernel32.dll", "SetUnhandledExceptionFilter",   SetUnhandledExceptionFilter_msabi);
-    REG("kernel32.dll", "ExitProcess",                   ExitProcess_msabi);
-    REG("kernel32.dll", "GetCurrentProcess",             GetCurrentProcess_msabi);
-    REG("kernel32.dll", "lstrlenA",                      lstrlenA_msabi);
-    REG("kernel32.dll", "lstrlenW",                      lstrlenW_msabi);
-    REG("kernel32.dll", "lstrcpyA",                      lstrcpyA_msabi);
-    REG("kernel32.dll", "RtlZeroMemory",                 ZeroMemory_msabi);
-    REG("kernel32.dll", "RtlCopyMemory",                 CopyMemory_msabi);
-    REG("kernel32.dll", "RtlFillMemory",                 FillMemory_msabi);
-
-    /* Also register under the "Rtl*" names that some code uses directly */
-    REG("ntdll.dll",    "RtlZeroMemory",                 ZeroMemory_msabi);
-    REG("ntdll.dll",    "RtlCopyMemory",                 CopyMemory_msabi);
+    /* ---- ntdll.dll (Rtl* are also available via kernel32.dll) ---- */
+    /* ntdll RtlZeroMemory/RtlCopyMemory are registered via Kernel32RegisterExports */
 
     /* ---- user32.dll ---- */
-    REG("user32.dll",   "MessageBoxA",                   MessageBoxA_msabi);
+    REG("user32.dll", "MessageBoxA", MessageBoxA_msabi);
 
-    /* ---- gdi32.dll ---- (applications rarely import by name; handled via syscalls) */
+    /* ---- kernel32.dll — full export set in kernel32_exports.c ---- */
+    Kernel32RegisterExports();
 
-    DbgPrint("EXE: Registered %lu exports\n", g_ExportCount);
+    DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 
 /* ============================================================================

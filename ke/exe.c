@@ -402,6 +402,9 @@ ExeInitRegistry(VOID)
     /* ---- user32.dll — window mgmt + message pump + input ---- */
     User32RegisterExports();
 
+    /* ---- gdi32.dll — graphics device interface ---- */
+    Gdi32RegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

@@ -67,6 +67,7 @@ VOID NTAPI ExeInitRegistry(VOID);
 VOID NTAPI Kernel32RegisterExports(VOID);
 VOID NTAPI NtdllRegisterExports(VOID);
 VOID NTAPI User32RegisterExports(VOID);
+VOID NTAPI Gdi32RegisterExports(VOID);
 
 /* Export table access (for GetProcAddress implementation) */
 extern PVOID NTAPI ExeResolveExport(const CHAR *DllName, const CHAR *FuncName);

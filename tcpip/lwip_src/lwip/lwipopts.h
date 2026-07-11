@@ -35,3 +35,4 @@
 #define LWIP_DEBUG 0
 
 #endif
+#define LWIP_TIMEVAL_PRIVATE 0

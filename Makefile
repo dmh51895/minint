@@ -11,7 +11,7 @@ LD      := ld
 CFLAGS  := -std=gnu11 -m64 -ffreestanding -fno-stack-protector -fno-pic \
            -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -mcmodel=kernel \
            -fshort-wchar -fno-builtin -nostdlib -Wall -Wextra -O2 -g \
-           -Iinclude -Iwin32k -Indis -Itcpip/lwip_src
+           -Iinclude -Iwin32k -Indis -Itcpip/lwip_src -Iminint
 ASFLAGS := -m64 -ffreestanding -fno-pic -c
 LDFLAGS := -n -T linker.ld -z noexecstack -z max-page-size=0x1000 --no-relax
 
@@ -22,7 +22,7 @@ OBJS := boot/mbentry.o \
          boot/chain/smss_real/smsessn.o boot/chain/smss_real/smutil.o \
          boot/chain/smss_real/smloop.o boot/chain/smss_real/smsbapi.o \
          boot/chain/smss_real/crashdmp.o boot/chain/smss_real/pagefile.o \
-         ke/trap.o ke/ctxswap.o ke/idt.o ke/irql.o ke/bugcheck.o ke/dispatch.o \
+         ke/trap.o ke/ctxswap.o ke/idt.o ke/irql.o ke/bugcheck.o ke/dispatch.o minint/ke/smp.o minint/ke/aptramp.o minint/ke/apic.o \
           ke/syscall.o ke/services.o ke/pe.o ke/exe.o ke/exports/kernel32_exports.o ke/exports/ntdll_exports.o ke/exports/user32_exports.o ke/exports/gdi32_exports.o ke/exports/advapi32_exports.o ke/exports/ole32_exports.o ke/exports/dxgi_exports.o ke/exports/d3dcompiler_exports.o ke/exports/shell32_exports.o ke/exports/ws2_32_exports.o \
          hal/hal.o hal/fb.o hal/kbd.o hal/mouse.o hal/mb2fb.o rtl/rtl.o rtl/rtlsupp.o \
          lib/font/ttf.o \
@@ -82,12 +82,12 @@ minint.elf: $(OBJS) linker.ld
 iso: minint.elf
 	mkdir -p isoroot/boot/grub
 	cp minint.elf isoroot/boot/
-	printf 'set timeout=0\nset default=0\nmenuentry "MinNT" {\n  multiboot2 /boot/minint.elf\n  boot\n}\n' \
-	    > isoroot/boot/grub/grub.cfg
+	printf 'set timeout=5\nset default=0\nmenuentry "MinNT (Live/Demo Mode)" {\n  multiboot2 /boot/minint.elf\n  boot\n}\nmenuentry "MinNT (Debug Mode)" {\n  multiboot2 /boot/minint.elf\n  boot\n}\n' \
+    > isoroot/boot/grub/grub.cfg
 	grub-mkrescue -o minint.iso isoroot
 
 run: iso
-	qemu-system-x86_64 -cdrom minint.iso -serial stdio -m 256M
+	qemu-system-x86_64 -cdrom minint.iso -serial stdio -m 256M -boot order=d,menu=off
 
 
 clean:
@@ -105,3 +105,13 @@ tcpip/lwip_src/core/%.o: tcpip/lwip_src/core/%.c
 
 tcpip/sys_arch.o: tcpip/lwip_src/sys_arch.c
 	$(CC) $(CFLAGS) -Itcpip/lwip_src -c $< -o $@
+
+# Rules for minint/ subdirectory
+minint/ke/%.o: minint/ke/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+minint/ke/%.o: minint/ke/%.S
+	$(AS) $(ASFLAGS) $< -o $@
+
+minint/tcpip/%.o: minint/tcpip/%.c
+	$(CC) $(CFLAGS) -c $< -o $@

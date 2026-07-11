@@ -94,12 +94,32 @@ VOID NTAPI KiInitializeClockInterrupt(VOID)
     HalEnableSystemInterrupt(0);
 }
 
-/* ---- Crude calibrated-ish stall (busy loop on the PIT tick) ---------------------- */
+/* ---- TSC-based microsecond delay (works with interrupts disabled) -------------- */
 
+/* 
+ * Approximate CPU frequency for TSC-based delays.
+ * Assume 2.0 GHz as a reasonable default for modern CPUs.
+ * TSC runs at CPU clock rate, so 2GHz = 2 cycles per ns = 2000 cycles per us
+ */
+#define TSC_CYCLES_PER_US 2000ULL
+
+/* 
+ * KeStallExecutionProcessor - Busy-wait for specified microseconds
+ * Uses RDTSC (Time Stamp Counter) which works regardless of interrupt state
+ */
 VOID NTAPI KeStallExecutionProcessor(ULONG Microseconds)
 {
-    ULONG64 ticks = (Microseconds + 9999) / 10000;   /* 100Hz -> 10ms/tick */
-    ULONG64 end = KeTickCount + (ticks ? ticks : 1);
-    while (KeTickCount < end)
+    ULONG64 start, end;
+    ULONG64 cycles = (ULONG64)Microseconds * TSC_CYCLES_PER_US;
+    
+    /* Read TSC - works even with interrupts disabled */
+    __asm__ __volatile__("rdtsc" : "=A" (start));
+    
+    end = start + cycles;
+    
+    /* Busy wait using pause hint for power efficiency */
+    do {
         __asm__ __volatile__("pause");
+        __asm__ __volatile__("rdtsc" : "=A" (start));
+    } while (start < end);
 }

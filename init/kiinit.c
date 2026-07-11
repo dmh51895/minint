@@ -22,6 +22,8 @@
 #include <nt/fs.h>
 #include <nt/lpc.h>
 #include <nt/dispatcher.h>
+#include <nt/apic.h>
+#include <nt/smp.h>
 #include "../boot/chain/chain.h"
 #include <rtw/rtw_usb.h>
 #include "../win32k/d3d12/d3d12.h"
@@ -137,6 +139,20 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
     KeInitializeIdt();
     DbgPrint("KE: GDT/IDT loaded, 256 vectors wired\n");
 
+    /* Initialize Local APIC for this processor (BSP) - REAL HARDWARE */
+    {
+        extern VOID NTAPI KeInitializeLapic(VOID);
+        extern BOOLEAN NTAPI KeDetectLapic(VOID);
+        extern ULONG NTAPI KeGetLapicVersion(VOID);
+        
+        if (KeDetectLapic()) {
+            KeInitializeLapic();
+            DbgPrint("KE: Local APIC initialized, version=%x\n", KeGetLapicVersion());
+        } else {
+            DbgPrint("KE: No Local APIC detected (legacy mode)\n");
+        }
+    }
+
     /* Phase 0 proper runs at PASSIVE so spinlocks can raise/lower legally.
        The PIC is fully masked, so enabling IF here delivers nothing. */
     KfLowerIrql(PASSIVE_LEVEL);
@@ -249,6 +265,21 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
     KiInitializeClockInterrupt();
     KfLowerIrql(PASSIVE_LEVEL);
     DbgPrint("KE: clock interrupt at 100Hz, IRQL PASSIVE_LEVEL\n\n");
+
+    /* Initialize SMP - detect and start AP processors on multi-core systems */
+    {
+        extern NTSTATUS NTAPI KeSmpInitSystem(VOID);
+        extern ULONG KeNumberProcessors;
+        extern KAFFINITY KeActiveProcessors;
+        
+        status = KeSmpInitSystem();
+        if (NT_SUCCESS(status)) {
+            DbgPrint("SMP: %u processor(s) detected, active mask=0x%llx\n", 
+                     KeNumberProcessors, KeActiveProcessors);
+        } else {
+            DbgPrint("SMP: running in single-core mode\n");
+        }
+    }
 
     /* RTW88 WiFi — after clock so KeStallExecutionProcessor works */
     status = RtwInitSystem();

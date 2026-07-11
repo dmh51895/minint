@@ -45,6 +45,7 @@ pd0:    .skip 4096      /* covers 0GB - 1GB   */
 pd1:    .skip 4096      /* covers 1GB - 2GB   */
 pd2:    .skip 4096      /* covers 2GB - 3GB   */
 pd3:    .skip 4096      /* covers 3GB - 4GB   */
+pd4:    .skip 4096      /* covers 4GB - 5GB (for APIC at 0xFEE00000) */
 .align 16
 stack_bottom:
     .skip 32768                       /* 32K boot stack */
@@ -70,14 +71,15 @@ _start:
     cli
     movl %ebx, mb2_info_ptr           /* stash multiboot2 info (phys) */
 
-    /* Build page tables: identity map up to 4GB with 2MB pages */
-    /* PML4[0..3] -> PDPT entries, each covering 1GB */
+    /* Build page tables: identity map up to 5GB with 2MB pages */
+    /* PML4[0..4] -> PDPT entries, each covering 1GB */
     movl $pdpt, %eax
     orl  $0x3, %eax                   /* present | write              */
     movl %eax, pml4
     movl %eax, pml4 + 8               /* also at PML4[1] for >1GB     */
     movl %eax, pml4 + 16              /* PML4[2]                      */
     movl %eax, pml4 + 24              /* PML4[3]                      */
+    movl %eax, pml4 + 32              /* PML4[4] for 4GB-5GB (APIC)   */
 
     /* PDPT[0] -> pd0, PDPT[1] -> pd1, etc */
     movl $pd0, %eax
@@ -92,10 +94,13 @@ _start:
     movl $pd3, %eax
     orl  $0x3, %eax
     movl %eax, pdpt + 24
+    movl $pd4, %eax
+    orl  $0x3, %eax
+    movl %eax, pdpt + 32              /* 4GB-5GB for APIC */
 
     /* Fill each PD with 512 2MB page entries */
     movl $0, %ebx                     /* PD index (0 = pd0, 1 = pd1...) */
-    movl $4, %ebp                     /* 4 PDs total */
+    movl $5, %ebp                     /* 5 PDs total (0-4GB + 4GB-5GB for APIC) */
 1:  movl $0, %ecx                     /* entry index within PD */
     movl %ebx, %eax
     shll $30, %eax                    /* base = pd_idx * 1GB */

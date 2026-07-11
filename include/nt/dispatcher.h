@@ -19,10 +19,10 @@ typedef struct _KTHREAD *PKTHREAD;
 /* ---- Dispatcher header — common to all dispatcher objects -------------- */
 
 typedef struct _DISPATCHER_HEADER {
-    UCHAR   Type;               /* EventObject, SemaphoreObject, etc. */
-    UCHAR   SignalState;        /* 0 = not signaled, 1 = signaled     */
+    UCHAR   Type;
+    UCHAR   SignalState;
     USHORT  Size;
-    LIST_ENTRY WaitListHead;    /* threads waiting on this object     */
+    LIST_ENTRY WaitListHead;
 } DISPATCHER_HEADER, *PDISPATCHER_HEADER;
 
 /* ---- Dispatcher object types ------------------------------------------- */
@@ -35,8 +35,8 @@ typedef struct _DISPATCHER_HEADER {
 
 /* ---- Event types for KeInitializeEvent --------------------------------- */
 
-#define NotificationEvent       0   /* stays signaled until reset       */
-#define SynchronizationEvent    1   /* resets automatically on release  */
+#define NotificationEvent       0
+#define SynchronizationEvent    1
 
 /* ---- KEVENT ------------------------------------------------------------ */
 
@@ -48,16 +48,16 @@ typedef struct _KEVENT {
 
 typedef struct _KSEMAPHORE {
     DISPATCHER_HEADER Header;
-    ULONG    Limit;              /* maximum count                       */
-    LONG     CurrentCount;       /* actual semaphore count              */
+    ULONG    Limit;
+    LONG     CurrentCount;
 } KSEMAPHORE, *PKSEMAPHORE;
 
 /* ---- KMUTEX (called KMUTANT in NT internals) --------------------------- */
 
 typedef struct _KMUTANT {
     DISPATCHER_HEADER Header;
-    PVOID   OwnerThread;         /* current owning thread               */
-    ULONG   Abandoned;           /* non-zero if owner terminated        */
+    PVOID   OwnerThread;
+    ULONG   Abandoned;
     ULONG   ApcDisableCount;
 } KMUTANT, *PKMUTANT;
 
@@ -66,6 +66,86 @@ typedef struct _KMUTANT {
 #define STATUS_WAIT_0           0x00000000L
 #define STATUS_TIMEOUT          0x00000102L
 #define STATUS_ABANDONED_WAIT_0 0x00000080L
+
+/* ---- KAPC ---------------------------------------------------------------- */
+
+typedef struct _KAPC {
+    UCHAR   Type;
+    UCHAR   ApcMode;
+    BOOLEAN Inserted;
+    BOOLEAN KernelApc;
+    PVOID   NormalRoutine;
+    PVOID   NormalContext;
+    PVOID   SystemArgument1;
+    PVOID   SystemArgument2;
+    LIST_ENTRY ApcListEntry;
+    PKTHREAD Thread;
+} KAPC, *PKAPC;
+
+/* ---- KDPC ---------------------------------------------------------------- */
+
+typedef VOID (NTAPI *KDPC_Routine)(struct _KDPC *Dpc, PVOID DeferredContext,
+                                   PVOID SystemArgument1, PVOID SystemArgument2);
+
+typedef struct _KDPC {
+    UCHAR   Type;
+    UCHAR   Importance;
+    USHORT  Number;
+    KDPC_Routine *DeferredRoutine;
+    PVOID   DeferredContext;
+    PVOID   SystemArgument1;
+    PVOID   SystemArgument2;
+    PVOID   Lock;
+} KDPC, *PKDPC;
+
+/* ---- KDEVICE_QUEUE_ENTRY ------------------------------------------------- */
+
+typedef struct _KDEVICE_QUEUE_ENTRY {
+    LIST_ENTRY DeviceListEntry;
+} KDEVICE_QUEUE_ENTRY, *PKDEVICE_QUEUE_ENTRY;
+
+/* ---- KDEVICE_QUEUE ------------------------------------------------------- */
+
+typedef struct _KDEVICE_QUEUE {
+    ULONG   Type;
+    ULONG   Size;
+    LIST_ENTRY DeviceListHead;
+    KSPIN_LOCK Lock;
+    BOOLEAN Busy;
+} KDEVICE_QUEUE, *PKDEVICE_QUEUE;
+
+/* ---- WAIT_CONTEXT_BLOCK -------------------------------------------------- */
+
+typedef NTSTATUS (NTAPI *PDRIVER_CONTROL)(struct _DEVICE_OBJECT *DeviceObject,
+                                            struct _IRP *Irp, PVOID Context,
+                                            ULONG MapRegisterCount);
+
+typedef struct _WAIT_CONTEXT_BLOCK {
+    KDEVICE_QUEUE_ENTRY WaitQueueEntry;
+    PDRIVER_CONTROL DeviceRoutine;
+    PVOID DeviceContext;
+    ULONG NumberOfMapRegisters;
+    PVOID DeviceObject;
+    PVOID CurrentIrp;
+    PKDPC BufferChainingDpc;
+} WAIT_CONTEXT_BLOCK, *PWAIT_CONTEXT_BLOCK;
+
+/* ---- GUID ---------------------------------------------------------------- */
+
+#ifndef GUID_DEFINED
+#define GUID_DEFINED
+typedef struct _GUID {
+    ULONG   Data1;
+    USHORT  Data2;
+    USHORT  Data3;
+    UCHAR   Data4[8];
+} GUID;
+#endif
+
+/* ---- PDRIVER_REINITIALIZE ------------------------------------------------ */
+
+typedef VOID (NTAPI *PDRIVER_REINITIALIZE)(struct _DRIVER_OBJECT *DriverObject,
+                                            PVOID Context, ULONG Count);
 
 /* ---- API --------------------------------------------------------------- */
 

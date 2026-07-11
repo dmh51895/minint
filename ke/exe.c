@@ -408,6 +408,9 @@ ExeInitRegistry(VOID)
     /* ---- advapi32.dll — registry + security + services ---- */
     Advapi32RegisterExports();
 
+    /* ---- ole32.dll — COM activation ---- */
+    Ole32RegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

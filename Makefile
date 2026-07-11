@@ -28,7 +28,7 @@ OBJS := boot/mbentry.o \
           drivers/ata/ahci.o \
          mm/mminit.o mm/mmuser.o \
          ex/pool.o ob/obmgr.o ps/psmgr.o \
-         io/iomgr.o cm/cm.o se/se.o fs/fs.o fs/fat32.o lpc/lpc.o \
+         io/iomgr.o cm/cm.o se/se.o fs/fs.o fs/fat32.o fs/partition.o lpc/lpc.o \
          ndk/ndk_shim.o \
 win32k/win32k.o win32k/gdikernel.o win32k/usermsg.o win32k/userwnd.o \
           win32k/d3d12/d3d12.o win32k/d3d12/samples/d3d12_triangle.o \

@@ -27,6 +27,8 @@
 #include "../win32k/d3d12/d3d12.h"
 #include <nt/exe.h>
 #include <nt/ahci.h>
+#include <nt/fat32.h>
+#include <nt/partition.h>
 
 extern NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
 
@@ -199,6 +201,14 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
         DbgPrint("AHCI: subsystem ready\n");
     else
         DbgPrint("AHCI: no controller found (non-fatal)\n");
+
+    /* Partition scan — find FAT32 on AHCI disk */
+    status = PartitionScan();
+    if (NT_SUCCESS(status)) {
+        DbgPrint("INIT: %lu partition(s) found, FAT32 mounted\n", PartitionGetCount());
+    } else {
+        DbgPrint("INIT: no usable partitions (non-fatal): 0x%x\n", (ULONG)status);
+    }
     if (NT_SUCCESS(status))
         DbgPrint("USB: subsystem ready\n");
     else

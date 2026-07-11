@@ -411,6 +411,12 @@ ExeInitRegistry(VOID)
     /* ---- ole32.dll — COM activation ---- */
     Ole32RegisterExports();
 
+    /* ---- dxgi.dll — DirectX Graphics Infrastructure ---- */
+    DxgiRegisterExports();
+
+    /* ---- d3dcompiler_47.dll — HLSL shader compiler ---- */
+    D3dCompilerRegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

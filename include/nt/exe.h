@@ -70,6 +70,8 @@ VOID NTAPI User32RegisterExports(VOID);
 VOID NTAPI Gdi32RegisterExports(VOID);
 VOID NTAPI Advapi32RegisterExports(VOID);
 VOID NTAPI Ole32RegisterExports(VOID);
+VOID NTAPI DxgiRegisterExports(VOID);
+VOID NTAPI D3dCompilerRegisterExports(VOID);
 
 /* Export table access (for GetProcAddress implementation) */
 extern PVOID NTAPI ExeResolveExport(const CHAR *DllName, const CHAR *FuncName);

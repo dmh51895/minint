@@ -23,7 +23,7 @@ OBJS := boot/mbentry.o \
          boot/chain/smss_real/smloop.o boot/chain/smss_real/smsbapi.o \
          boot/chain/smss_real/crashdmp.o boot/chain/smss_real/pagefile.o \
          ke/trap.o ke/ctxswap.o ke/idt.o ke/irql.o ke/bugcheck.o ke/dispatch.o \
-          ke/syscall.o ke/services.o ke/pe.o ke/exe.o ke/exports/kernel32_exports.o ke/exports/ntdll_exports.o ke/exports/user32_exports.o ke/exports/gdi32_exports.o ke/exports/advapi32_exports.o ke/exports/ole32_exports.o \
+          ke/syscall.o ke/services.o ke/pe.o ke/exe.o ke/exports/kernel32_exports.o ke/exports/ntdll_exports.o ke/exports/user32_exports.o ke/exports/gdi32_exports.o ke/exports/advapi32_exports.o ke/exports/ole32_exports.o ke/exports/dxgi_exports.o ke/exports/d3dcompiler_exports.o \
          hal/hal.o hal/fb.o hal/kbd.o hal/mouse.o hal/mb2fb.o rtl/rtl.o rtl/rtlsupp.o \
           drivers/ata/ahci.o \
          mm/mminit.o mm/mmuser.o \

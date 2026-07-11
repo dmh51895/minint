@@ -16,6 +16,7 @@
 #include <nt/mm.h>
 #include <nt/ahci.h>
 #include <nt/fat32.h>
+#include <nt/ntfs.h>
 #include <nt/partition.h>
 #ifndef STATUS_DEVICE_DOES_NOT_EXIST
 #define STATUS_DEVICE_DOES_NOT_EXIST ((NTSTATUS)0xC000003EL)
@@ -239,9 +240,10 @@ NTSTATUS NTAPI PartitionScan(VOID)
                     } else if (__builtin_memcmp(bs + 0x03, "NTFS", 4) == 0) {
                         p->fstype[0] = 'N'; p->fstype[1] = 'T'; p->fstype[2] = 'F';
                         p->fstype[3] = 'S'; p->fstype[4] = 0;
-                        p->mounted = FALSE; /* NTFS not yet supported */
-                        PDBG("GPT partition %u: NTFS at LBA %llu (not yet readable)",
-                             i, p->start_lba);
+                        NTSTATUS ms = NtfsMountPartition(p->start_lba);
+                        p->mounted = NT_SUCCESS(ms);
+                        PDBG("GPT partition %u: NTFS at LBA %llu (%s)",
+                             i, p->start_lba, p->mounted ? "mounted" : "mount failed");
                     } else {
                         p->fstype[0] = '?'; p->fstype[1] = 0;
                         PDBG("GPT partition %u: unknown FS at LBA %llu", i, p->start_lba);
@@ -287,7 +289,14 @@ NTSTATUS NTAPI PartitionScan(VOID)
                 break;
             case PART_TYPE_NTFS:
                 __builtin_memcpy(p->fstype, "NTFS", 5);
-                PDBG("  [%u] NTFS at LBA %u (not yet readable)", i, e->start_lba);
+                PDBG("  [%u] NTFS at LBA %u, trying mount...", i, e->start_lba);
+                {
+                    NTSTATUS ms = NtfsMountPartition(e->start_lba);
+                    p->mounted = NT_SUCCESS(ms);
+                    if (!p->mounted) {
+                        PDBG("  NTFS mount failed: 0x%x", (ULONG)ms);
+                    }
+                }
                 break;
             case PART_TYPE_EXTENDED:
             case PART_TYPE_EXT_LBA:

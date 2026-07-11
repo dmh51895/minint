@@ -29,6 +29,7 @@
 #include <nt/ahci.h>
 #include <nt/fat32.h>
 #include <nt/partition.h>
+#include <nt/cache.h>
 
 extern NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
 
@@ -171,6 +172,9 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
     status = CmInitSystem();
     if (!NT_SUCCESS(status))
         KeBugCheckEx(PHASE0_INITIALIZATION_FAILED, status, 7, 0, 0);
+
+    /* Cache manager init */
+    CcInitSystem();
 
     /* Se: security subsystem */
     status = SeInitSystem();

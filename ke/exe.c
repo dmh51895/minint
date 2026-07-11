@@ -396,6 +396,9 @@ ExeInitRegistry(VOID)
     /* ---- kernel32.dll — full export set in kernel32_exports.c ---- */
     Kernel32RegisterExports();
 
+    /* ---- ntdll.dll — Nt* syscalls + Rtl* runtime + Ldr* loader ---- */
+    NtdllRegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

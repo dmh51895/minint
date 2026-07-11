@@ -1,0 +1,123 @@
+MinNT Kernel [Version 6.1.0001] (build: barebones)
+KiSystemStartup: BootInfo=0x00000000001e3820, CPU 0
+
+KE: GDT/IDT loaded, 256 vectors wired
+MM: PFN database at 0x00000000001e5000, 65504 pages managed, 65113 free (254 MB)
+EX: NonPaged pool online
+OB: object manager online
+IO: I/O manager online
+IO: \Device\Null ready
+CM: registry root key initialized
+SE: security subsystem initialized (stub mode)
+FS: file system manager initialized
+FS: RAM disk created: 16 MB, 32768 sectors, 8183 clusters
+FS: FAT16 mounted on RAM disk
+LPC: local procedure call initialized
+USB: scanning PCI for UHCI...
+USB: no UHCI found
+USB: no controller found (non-fatal)
+MB2: framebuffer 1024x768 bpp=32 pitch=4096 type=1 at 0x00000000fd000000
+FB: 1024x768 pitch=4096 bpp=32 at 0x00000000fd000000
+KBD: PS/2 keyboard initialized (IRQ1)
+MOUSE: PS/2 mouse initialized (IRQ12), pos=512,384
+PS: created process 'System' PID 4
+KE: clock interrupt at 100Hz, IRQL PASSIVE_LEVEL
+
+RTW: probing for 8821CU... (embedded firmware: 139472 bytes)
+RTW: USB init
+RTW: chip init failed: 0xffffffffc000009c
+RTW: no 8821CU found (non-fatal)
+KE: syscall MSRs initialized (STAR, LSTAR, FMASK)
+
+╔══════════════════════════════════════════╗
+║  MinNT Boot Chain Initialization         ║
+║  SMSS → CSRSS → Winlogon → Explorer      ║
+╚══════════════════════════════════════════╝
+
+CHAIN: launching SMSS (Session Manager)...
+PS: created thread TID 8 in 'System'
+CHAIN: boot chain initiated
+PS: created thread TID 12 in 'System'
+PS: created thread TID 16 in 'System'
+PS: dispatching...
+
+========================================
+  SMSS: Session Manager Subsystem
+  MinNT Session 0 Initialization
+  (ported from ReactOS SMSS)
+========================================
+
+SMSS: Phase 1 - Creating security descriptors...
+SMSS: Security descriptors created
+SMSS: Phase 2 - Creating object directories...
+NDK_SHIM: directory and symlink object types initialized
+SMSS: created directory s
+SMSS: created directory s
+SMSS: created directory s
+SMSS: created directory s
+SMSS: created directory s
+SMSS: created directory s
+SMSS: created directory s
+SMSS: Phase 3 - Initializing subsystem LPC...
+LPC: local procedure call initialized
+SMSS: Phase 4 - Creating SM API port...
+SMSS: creating SM API port...
+LPC: created port '%wZ'
+SMSS: SM API port created
+SMSS: Phase 5 - Initializing KnownDlls...
+SMSS: initializing KnownDlls...
+SMSS: KnownDlls initialized
+SMSS: Phase 6 - Launching CSRSS...
+PS: created thread TID 20 in 'System'
+  [thread A] tick=6 counter=1
+SMSS: starting CSRSS...
+LPC: created port '%wZ'
+SMSS: CSRSS LPC port created
+SMSS: CSRSS initialized (session 0 subsystem)
+SMSS: CSRSS is running
+SMSS: Phase 7 - Launching Winlogon...
+PS: created thread TID 24 in 'System'
+SMSS: Winlogon is running
+
+========================================
+  SMSS: All subsystems initialized!
+  CSRSS: running (session 0)
+  Winlogon: running (session 0)
+========================================
+
+SMSS: session manager exiting (subsystems stay alive)
+
+========================================
+  WINLOGON: Windows Logon Process
+  Session 0 Console Window Station
+  (ported from ReactOS Winlogon)
+========================================
+
+WINLOGON: Phase 1 - Creating window station and desktops...
+WINLOGON: creating window station WinSta0...
+WINLOGON: WinSta0 created
+WINLOGON: Default desktop created
+WINLOGON: Winlogon desktop created
+WINLOGON: Disconnect desktop created
+WINLOGON: Phase 2 - Initializing SAS handling...
+WINLOGON: SAS handler initialized
+WINLOGON: Phase 3 - Creating user token (auto-logon)...
+WINLOGON: creating user token...
+WINLOGON: user token created (elevated=no)
+WINLOGON: Phase 4 - Loading user profile...
+WINLOGON: loading user profile...
+WINLOGON: using default profile path
+WINLOGON: user profile loaded
+WINLOGON: user logon complete
+WINLOGON: Phase 5 - Starting user shell...
+WINLOGON: starting user shell (explorer)...
+PS: created thread TID 28 in 'System'
+WINLOGON: explorer started
+
+========================================
+  WINLOGON: Ready!
+  User shell is running
+========================================
+
+EXPLORER: starting graphical desktop...
+EXPLORER: graphical desktop rendered (1024x768)

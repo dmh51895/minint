@@ -469,6 +469,7 @@ NTSTATUS NTAPI PeLoadImage(PVOID FileBase,
         ULONG relocSize = OptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
 
         if (relocRva && relocSize) {
+            LONG64 delta = (LONG64)((ULONG64)imageBase - (ULONG64)OptHeader->ImageBase);
             PUCHAR relocBase = imageBase + relocRva;
             PUCHAR relocEnd = relocBase + relocSize;
 
@@ -483,12 +484,16 @@ NTSTATUS NTAPI PeLoadImage(PVOID FileBase,
 
                     if (type == IMAGE_REL_BASED_DIR64) {
                         ULONG64 *patch = (ULONG64 *)(imageBase + reloc->VirtualAddress + offset);
-                        /* No rebasing needed if loaded at preferred base */
-                        (void)patch;
+                        *patch += delta;
+                    } else if (type == 0) {
+                        /* IMAGE_REL_BASED_ABSOLUTE — padding, skip */
                     }
                 }
                 relocBase += reloc->SizeOfBlock;
             }
+
+            if (delta != 0)
+                DbgPrint("PE: applied relocations (delta %+lld)\n", (LONGLONG)delta);
         }
     }
 

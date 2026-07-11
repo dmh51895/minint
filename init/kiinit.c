@@ -25,6 +25,7 @@
 #include "../boot/chain/chain.h"
 #include <rtw/rtw_usb.h>
 #include "../win32k/d3d12/d3d12.h"
+#include <nt/exe.h>
 
 extern NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
 
@@ -237,6 +238,10 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
 
     /* Initialize syscall MSRs for user mode */
     KiInitializeSyscall();
+
+    /* Initialize DLL export registry for native EXE support */
+    ExeInitRegistry();
+    DbgPrint("INIT: DLL export registry ready\n");
 
     /* Launch boot chain: SMSS → CSRSS → Winlogon → Explorer */
     status = BootChainInit();

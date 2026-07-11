@@ -38,7 +38,7 @@ static ULONG64 KiKernelCr3;
 /* 0: NtDbgPrint — print a string from user space */
 static NTSTATUS SvcDbgPrint(PKTRAP_FRAME tf)
 {
-    const CHAR *String = (const CHAR *)tf->Rcx;
+    const CHAR *String = (const CHAR *)tf->R10;
     if (!MmIsAddressValid(String)) return STATUS_ACCESS_VIOLATION;
     DbgPrint("USER: %s\n", String ? String : "(null)");
     return STATUS_SUCCESS;
@@ -47,7 +47,7 @@ static NTSTATUS SvcDbgPrint(PKTRAP_FRAME tf)
 /* 1: NtGetTickCount — return the current tick count */
 static NTSTATUS SvcGetTickCount(PKTRAP_FRAME tf)
 {
-    volatile ULONG64 *OutTick = (volatile ULONG64 *)tf->Rcx;
+    volatile ULONG64 *OutTick = (volatile ULONG64 *)tf->R10;
     if (OutTick && !MmIsAddressValid(OutTick)) return STATUS_ACCESS_VIOLATION;
     if (OutTick)
         *OutTick = KeTickCount;
@@ -83,7 +83,7 @@ static NTSTATUS SvcBlameCurtis(PKTRAP_FRAME tf)
 /* 5: NtAllocateVirtualMemory */
 static NTSTATUS SvcAllocateVirtualMemory(PKTRAP_FRAME tf)
 {
-    PULONG_PTR base = (PULONG_PTR)tf->Rcx;
+    PULONG_PTR base = (PULONG_PTR)tf->R10;
     if (!MmIsAddressValid(base)) return STATUS_ACCESS_VIOLATION;
     ULONG_PTR zeroBits = tf->Rdx;
     ULONG_PTR regionSize = tf->R8;
@@ -97,7 +97,7 @@ static NTSTATUS SvcAllocateVirtualMemory(PKTRAP_FRAME tf)
 /* 6: NtFreeVirtualMemory */
 static NTSTATUS SvcFreeVirtualMemory(PKTRAP_FRAME tf)
 {
-    PULONG_PTR base = (PULONG_PTR)tf->Rcx;
+    PULONG_PTR base = (PULONG_PTR)tf->R10;
     if (!MmIsAddressValid(base)) return STATUS_ACCESS_VIOLATION;
     return MmFreeVirtualMemory(NULL, base);
 }
@@ -105,7 +105,7 @@ static NTSTATUS SvcFreeVirtualMemory(PKTRAP_FRAME tf)
 /* 7: NtCreateFile */
 static NTSTATUS SvcCreateFile(PKTRAP_FRAME tf)
 {
-    return NtCreateFile((PHANDLE)tf->Rcx,
+    return NtCreateFile((PHANDLE)tf->R10,
                         (ACCESS_MASK)tf->Rdx,
                         (PISECURITY_DESCRIPTOR)tf->R8,
                         (PVOID)tf->R9,
@@ -118,7 +118,7 @@ static NTSTATUS SvcCreateFile(PKTRAP_FRAME tf)
 /* 8: NtReadFile */
 static NTSTATUS SvcReadFile(PKTRAP_FRAME tf)
 {
-    return NtReadFile((HANDLE)tf->Rcx, (PVOID)tf->Rdx,
+    return NtReadFile((HANDLE)tf->R10, (PVOID)tf->Rdx,
                        (PVOID)tf->R8, (PVOID)tf->R9,
                        (PVOID)tf->R10, (PVOID)tf->R11,
                        0, NULL, NULL);
@@ -127,7 +127,7 @@ static NTSTATUS SvcReadFile(PKTRAP_FRAME tf)
 /* 9: NtWriteFile */
 static NTSTATUS SvcWriteFile(PKTRAP_FRAME tf)
 {
-    return NtWriteFile((HANDLE)tf->Rcx, (PVOID)tf->Rdx,
+    return NtWriteFile((HANDLE)tf->R10, (PVOID)tf->Rdx,
                         (PVOID)tf->R8, (PVOID)tf->R9,
                         (PVOID)tf->R10, (PVOID)tf->R11,
                         0, NULL, NULL);
@@ -136,7 +136,7 @@ static NTSTATUS SvcWriteFile(PKTRAP_FRAME tf)
 /* 10: NtClose */
 static NTSTATUS SvcClose(PKTRAP_FRAME tf)
 {
-    return NtClose((HANDLE)tf->Rcx);
+    return NtClose((HANDLE)tf->R10);
 }
 
 /* ---- Section object type ------------------------------------------------ */
@@ -162,7 +162,7 @@ static VOID NTAPI SecSectionDelete(PVOID Body)
 /* 11: NtCreateSection */
 static NTSTATUS SvcCreateSection(PKTRAP_FRAME tf)
 {
-    PHANDLE SectionHandle = (PHANDLE)tf->Rcx;
+    PHANDLE SectionHandle = (PHANDLE)tf->R10;
     ACCESS_MASK DesiredAccess = (ACCESS_MASK)tf->Rdx;
     POBJECT_ATTRIBUTES ObjectAttributes = (POBJECT_ATTRIBUTES)tf->R8;
     PLARGE_INTEGER MaximumSize = (PLARGE_INTEGER)tf->R9;
@@ -226,7 +226,7 @@ static NTSTATUS SvcMapViewOfSection(PKTRAP_FRAME tf)
 /* 13: NtCreateProcess — create a user-mode process with its own address space */
 static NTSTATUS SvcCreateProcess(PKTRAP_FRAME tf)
 {
-    PHANDLE ProcessHandle = (PHANDLE)tf->Rcx;
+    PHANDLE ProcessHandle = (PHANDLE)tf->R10;
     ACCESS_MASK DesiredAccess = (ACCESS_MASK)tf->Rdx;
     POBJECT_ATTRIBUTES ObjectAttributes = (POBJECT_ATTRIBUTES)tf->R8;
     HANDLE ParentProcess = (HANDLE)tf->R9;
@@ -305,7 +305,7 @@ static NTSTATUS SvcCreateProcess(PKTRAP_FRAME tf)
 /* 14: NtCreateThread — create a user-mode thread in a process */
 static NTSTATUS SvcCreateThread(PKTRAP_FRAME tf)
 {
-    PHANDLE ThreadHandle = (PHANDLE)tf->Rcx;
+    PHANDLE ThreadHandle = (PHANDLE)tf->R10;
     ACCESS_MASK DesiredAccess = (ACCESS_MASK)tf->Rdx;
     POBJECT_ATTRIBUTES ObjectAttributes = (POBJECT_ATTRIBUTES)tf->R8;
     HANDLE ProcessHandle = (HANDLE)tf->R9;
@@ -363,7 +363,7 @@ static NTSTATUS SvcCreateThread(PKTRAP_FRAME tf)
 /* 15: NtTerminateProcess */
 static NTSTATUS SvcTerminateProcess(PKTRAP_FRAME tf)
 {
-    HANDLE ProcessHandle = (HANDLE)tf->Rcx;
+    HANDLE ProcessHandle = (HANDLE)tf->R10;
     NTSTATUS ExitStatus = (NTSTATUS)tf->Rdx;
 
     UNREFERENCED_PARAMETER(ExitStatus);
@@ -430,7 +430,7 @@ static NTSTATUS SvcTerminateProcess(PKTRAP_FRAME tf)
 /* 16: NtOpenKey */
 static NTSTATUS SvcOpenKey(PKTRAP_FRAME tf)
 {
-    PHANDLE KeyHandle = (PHANDLE)tf->Rcx;
+    PHANDLE KeyHandle = (PHANDLE)tf->R10;
     ACCESS_MASK DesiredAccess = (ACCESS_MASK)tf->Rdx;
     POBJECT_ATTRIBUTES ObjectAttributes = (POBJECT_ATTRIBUTES)tf->R8;
 
@@ -443,7 +443,7 @@ static NTSTATUS SvcOpenKey(PKTRAP_FRAME tf)
 /* 17: NtQueryValueKey */
 static NTSTATUS SvcQueryValueKey(PKTRAP_FRAME tf)
 {
-    HANDLE KeyHandle = (HANDLE)tf->Rcx;
+    HANDLE KeyHandle = (HANDLE)tf->R10;
     PUNICODE_STRING ValueName = (PUNICODE_STRING)tf->Rdx;
     ULONG KeyValueInformationClass = (ULONG)tf->R8;
     PVOID KeyValueInformation = (PVOID)tf->R9;
@@ -460,7 +460,7 @@ static NTSTATUS SvcQueryValueKey(PKTRAP_FRAME tf)
 /* 18: NtCreatePort */
 static NTSTATUS SvcCreatePort(PKTRAP_FRAME tf)
 {
-    return NtCreatePort((PHANDLE)tf->Rcx,
+    return NtCreatePort((PHANDLE)tf->R10,
                         (PUNICODE_STRING)tf->Rdx,
                         (ULONG)tf->R8, (ULONG)tf->R9,
                         NULL);
@@ -469,7 +469,7 @@ static NTSTATUS SvcCreatePort(PKTRAP_FRAME tf)
 /* 19: NtConnectPort */
 static NTSTATUS SvcConnectPort(PKTRAP_FRAME tf)
 {
-    return NtConnectPort((PHANDLE)tf->Rcx,
+    return NtConnectPort((PHANDLE)tf->R10,
                           (PUNICODE_STRING)tf->Rdx,
                           NULL, NULL,
                           NULL, NULL,
@@ -479,7 +479,7 @@ static NTSTATUS SvcConnectPort(PKTRAP_FRAME tf)
 /* 20: NtRequestWaitReplyPort */
 static NTSTATUS SvcRequestWaitReplyPort(PKTRAP_FRAME tf)
 {
-    return NtRequestWaitReplyPort((HANDLE)tf->Rcx,
+    return NtRequestWaitReplyPort((HANDLE)tf->R10,
                                    (PVOID)tf->Rdx, (PVOID)tf->R8);
 }
 
@@ -524,23 +524,31 @@ NTSTATUS NTAPI KiSystemServiceHandler(ULONG SyscallNumber, PKTRAP_FRAME TrapFram
 {
     if (SyscallNumber >= 0x1000)
     {
-        ULONG_PTR arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15;
+        /* Windows x64 syscall convention:
+         *   User code does: mov r10, rcx; mov eax, <num>; syscall
+         *   After syscall: R10=arg1, RDX=arg2, R8=arg3, R9=arg4
+         *   RCX = return address (destroyed by syscall)
+         *   Args 5+ are on the user stack at Rsp+0x28, Rsp+0x30, ...
+         *   (0x28 = 8 bytes return addr + 32 bytes shadow space)
+         */
+        ULONG_PTR UserStack = (ULONG_PTR)TrapFrame->Rsp;
 
-        arg1 = TrapFrame->Rcx;
-        arg2 = TrapFrame->Rdx;
-        arg3 = TrapFrame->R8;
-        arg4 = TrapFrame->R9;
-        arg5 = TrapFrame->R10;
-        arg6 = TrapFrame->R11;
-        arg7 = 0;
-        arg8 = 0;
-        arg9 = 0;
-        arg10 = 0;
-        arg11 = 0;
-        arg12 = 0;
-        arg13 = 0;
-        arg14 = 0;
-        arg15 = 0;
+        ULONG_PTR arg1  = TrapFrame->R10;
+        ULONG_PTR arg2  = TrapFrame->Rdx;
+        ULONG_PTR arg3  = TrapFrame->R8;
+        ULONG_PTR arg4  = TrapFrame->R9;
+        /* Stack args (validate user pointer before reading) */
+        ULONG_PTR arg5  = MmIsAddressValid((PVOID)(UserStack + 0x28)) ? *(ULONG_PTR*)(UserStack + 0x28) : 0;
+        ULONG_PTR arg6  = MmIsAddressValid((PVOID)(UserStack + 0x30)) ? *(ULONG_PTR*)(UserStack + 0x30) : 0;
+        ULONG_PTR arg7  = MmIsAddressValid((PVOID)(UserStack + 0x38)) ? *(ULONG_PTR*)(UserStack + 0x38) : 0;
+        ULONG_PTR arg8  = MmIsAddressValid((PVOID)(UserStack + 0x40)) ? *(ULONG_PTR*)(UserStack + 0x40) : 0;
+        ULONG_PTR arg9  = MmIsAddressValid((PVOID)(UserStack + 0x48)) ? *(ULONG_PTR*)(UserStack + 0x48) : 0;
+        ULONG_PTR arg10 = MmIsAddressValid((PVOID)(UserStack + 0x50)) ? *(ULONG_PTR*)(UserStack + 0x50) : 0;
+        ULONG_PTR arg11 = MmIsAddressValid((PVOID)(UserStack + 0x58)) ? *(ULONG_PTR*)(UserStack + 0x58) : 0;
+        ULONG_PTR arg12 = MmIsAddressValid((PVOID)(UserStack + 0x60)) ? *(ULONG_PTR*)(UserStack + 0x60) : 0;
+        ULONG_PTR arg13 = MmIsAddressValid((PVOID)(UserStack + 0x68)) ? *(ULONG_PTR*)(UserStack + 0x68) : 0;
+        ULONG_PTR arg14 = MmIsAddressValid((PVOID)(UserStack + 0x70)) ? *(ULONG_PTR*)(UserStack + 0x70) : 0;
+        ULONG_PTR arg15 = MmIsAddressValid((PVOID)(UserStack + 0x78)) ? *(ULONG_PTR*)(UserStack + 0x78) : 0;
 
         return Win32kSyscallDispatcher(SyscallNumber,
                                         arg1, arg2, arg3, arg4, arg5, arg6,

@@ -405,6 +405,9 @@ ExeInitRegistry(VOID)
     /* ---- gdi32.dll — graphics device interface ---- */
     Gdi32RegisterExports();
 
+    /* ---- advapi32.dll — registry + security + services ---- */
+    Advapi32RegisterExports();
+
     DbgPrint("EXE: Registered %lu total exports\n", g_ExportCount);
 }
 

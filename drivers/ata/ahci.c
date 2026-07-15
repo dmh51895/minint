@@ -667,6 +667,8 @@ ULONG NTAPI AhciGetTotalSectors(VOID)
 
 BOOLEAN NTAPI AhciIsPresent(VOID)
 {
+    if (!g_AhciInit) return FALSE;
+    if (IsListEmpty(&g_AhciControllers)) return FALSE;
     return AhciGetFirstPort() != NULL;
 }
 

@@ -98,10 +98,38 @@ minint.elf: $(OBJS) linker.ld
 	@echo "== Kernel built =="
 	@size $@ || true
 
-iso: minint.elf
+# ---- Setup Loader (setupldr) ----
+# A separate, minimal multiboot2 ELF used only for installing MinNT.
+# Contains just HAL + framebuffer + keyboard + AHCI + FAT32 + installer.
+# Built as a separate binary so the installer doesn't drag the full
+# kernel (with win32k, network, apps) into the install boot.
+SETUPLDR_OBJS := boot/setupldr_entry.o boot/setupldr.o \
+                 hal/hal.o hal/fb.o hal/kbd.o hal/mouse.o hal/mb2fb.o \
+                 rtl/rtl.o rtl/rtlsupp.o \
+                 ex/pool.o \
+                 boot/profile.o boot/bootargs.o \
+                 drivers/ata/ahci.o \
+                 fs/fs.o fs/fat32.o \
+                 setupapi/osinstall.o \
+                 init/kiinit_minimal.o
+
+# Minimal kiinit for setupldr (only the parts setupldr needs)
+init/kiinit_minimal.c:
+	@echo "// minimal kiinit (auto-generated)" > $@
+
+init/kiinit_minimal.o: init/kiinit_minimal.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+setupldr.elf: $(SETUPLDR_OBJS) setupldr_linker.ld
+	$(LD) -n -T setupldr_linker.ld -z noexecstack -z max-page-size=0x1000 --no-relax -o $@ $(SETUPLDR_OBJS)
+	@echo "== Setup Loader built =="
+	@size $@ || true
+
+iso: minint.elf setupldr.elf
 	mkdir -p isoroot/boot/grub
 	cp minint.elf isoroot/boot/
-	printf 'set timeout=10\nset default=0\n\ninsmod all_video\nset gfxmode=1920x1080x32,1024x768x32,1024x768,800x600,auto\nset gfxpayload=keep\n\nmenuentry "MinNT - Run from Disk (Live Mode)" {\n  echo "Loading MinNT Live..."\n  multiboot2 /boot/minint.elf\n  boot\n}\nmenuentry "MinNT - Install to Hard Drive" {\n  echo "Loading MinNT Installer..."\n  multiboot2 /boot/minint.elf /install\n  boot\n}\nmenuentry "MinNT - Safe Mode (Minimal Drivers)" {\n  echo "Loading MinNT Safe Mode..."\n  multiboot2 /boot/minint.elf /safemode\n  boot\n}\nmenuentry "MinNT - Safe Mode with Networking" {\n  echo "Loading MinNT Safe Mode + Network..."\n  multiboot2 /boot/minint.elf /safemode /network\n  boot\n}\nmenuentry "MinNT - Debug Mode (Serial Output)" {\n  echo "Loading MinNT (Debug)..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /debug\n  boot\n}\nmenuentry "MinNT - Text Mode Terminal" {\n  echo "Loading MinNT Terminal..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /terminal\n  boot\n}\nmenuentry "MinNT - Recovery Console" {\n  echo "Loading MinNT Recovery..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /recovery\n  boot\n}\nmenuentry "Reboot" {\n  reboot\n}\nmenuentry "Power Off" {\n  halt\n}\n' \
+	cp setupldr.elf isoroot/boot/
+	printf 'set timeout=10\nset default=0\n\ninsmod all_video\nset gfxmode=1920x1080x32,1024x768x32,1024x768,800x600,auto\nset gfxpayload=keep\n\nmenuentry "MinNT - Run from Disk (Live Mode)" {\n  echo "Loading MinNT Live..."\n  multiboot2 /boot/minint.elf\n  boot\n}\nmenuentry "MinNT - Install to Hard Drive" {\n  echo "Loading MinNT Setup Loader..."\n  multiboot2 /boot/setupldr.elf\n  boot\n}\nmenuentry "MinNT - Safe Mode (Minimal Drivers)" {\n  echo "Loading MinNT Safe Mode..."\n  multiboot2 /boot/minint.elf /safemode\n  boot\n}\nmenuentry "MinNT - Safe Mode with Networking" {\n  echo "Loading MinNT Safe Mode + Network..."\n  multiboot2 /boot/minint.elf /safemode /network\n  boot\n}\nmenuentry "MinNT - Debug Mode (Serial Output)" {\n  echo "Loading MinNT (Debug)..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /debug\n  boot\n}\nmenuentry "MinNT - Text Mode Terminal" {\n  echo "Loading MinNT Terminal..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /terminal\n  boot\n}\nmenuentry "MinNT - Recovery Console" {\n  echo "Loading MinNT Recovery..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /recovery\n  boot\n}\nmenuentry "Reboot" {\n  reboot\n}\nmenuentry "Power Off" {\n  halt\n}\n' \
     > isoroot/boot/grub/grub.cfg
 	grub-mkrescue -o minint.iso isoroot
 
@@ -110,7 +138,8 @@ run: iso
 
 
 clean:
-	rm -f $(OBJS) minint.elf minint.iso
+	rm -f $(OBJS) minint.elf minint.iso setupldr.elf
+	rm -f init/kiinit_minimal.c init/kiinit_minimal.o
 	rm -rf isoroot
 
 tcpip/lwip_src/core/ipv4/%.o: tcpip/lwip_src/core/ipv4/%.c

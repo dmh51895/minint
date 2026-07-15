@@ -156,6 +156,10 @@ static NTSTATUS BootTopoSort(ULONG *OutOrder, ULONG *OutCount)
     }
     if (n == 0) { *OutCount = 0; return STATUS_SUCCESS; }
 
+    /* Track emitted state separately so the registry's Initialized
+     * flag is not disturbed. */
+    BOOLEAN emitted[BOOT_MAX_SUBSYSTEMS] = {0};
+
     /* Each subsystem tracks how many unsatisfied dependencies. */
     ULONG indegree[BOOT_MAX_SUBSYSTEMS];
     RtlZeroMemory(indegree, sizeof(indegree));
@@ -178,16 +182,16 @@ static NTSTATUS BootTopoSort(ULONG *OutOrder, ULONG *OutCount)
     /* Process queue: nodes with indegree 0. Order within a phase is
      * the registration order. We prefer lower phase first so that
      * core drivers start before services and GUI. */
-    ULONG emitted = 0;
+    ULONG nEmitted = 0;
     BOOLEAN progress = TRUE;
-    while (progress && emitted < n) {
+    while (progress && nEmitted < n) {
         progress = FALSE;
         /* Find a node with indegree 0 and the lowest phase. */
         ULONG bestIdx = (ULONG)-1;
         ULONG bestPhase = (ULONG)-1;
         for (ULONG i = 0; i < BOOT_MAX_SUBSYSTEMS; i++) {
             if (!g_Registry[i].InUse || !g_Registry[i].ShouldInit) continue;
-            if (g_Registry[i].Initialized) continue;
+            if (emitted[i]) continue;
             if (indegree[i] != 0) continue;
             if (g_Registry[i].Phase < bestPhase) {
                 bestPhase = g_Registry[i].Phase;
@@ -196,13 +200,13 @@ static NTSTATUS BootTopoSort(ULONG *OutOrder, ULONG *OutCount)
         }
         if (bestIdx == (ULONG)-1) break;
         /* Emit. */
-        OutOrder[emitted++] = bestIdx;
-        g_Registry[bestIdx].Initialized = TRUE;  /* mark so we don't re-emit */
+        OutOrder[nEmitted++] = bestIdx;
+        emitted[bestIdx] = TRUE;
         progress = TRUE;
         /* Decrement indegree of anything that depended on us. */
         for (ULONG i = 0; i < BOOT_MAX_SUBSYSTEMS; i++) {
             if (!g_Registry[i].InUse || !g_Registry[i].ShouldInit) continue;
-            if (g_Registry[i].Initialized) continue;
+            if (emitted[i]) continue;
             for (ULONG k = 0; k < g_Registry[i].DepCount; k++) {
                 if (g_Registry[i].Deps[k] &&
                     BootFindRec(g_Registry[i].Deps[k]) == &g_Registry[bestIdx]) {
@@ -212,15 +216,23 @@ static NTSTATUS BootTopoSort(ULONG *OutOrder, ULONG *OutCount)
             }
         }
     }
-    /* Reset Initialized flags so subsequent boots work. */
-    for (ULONG i = 0; i < BOOT_MAX_SUBSYSTEMS; i++) {
-        g_Registry[i].Initialized = FALSE;
-    }
-    if (emitted != n) {
-        DbgPrint("BOOTREGISTRY: dependency cycle, %u/%u subsystems ordered\n", emitted, n);
+    if (nEmitted != n) {
+        DbgPrint("BOOTREGISTRY: dependency cycle, %u/%u subsystems ordered\n", nEmitted, n);
+        /* Dump remaining (un-emitted) subsystems and their indegree. */
+        for (ULONG i = 0; i < BOOT_MAX_SUBSYSTEMS; i++) {
+            if (!g_Registry[i].InUse || !g_Registry[i].ShouldInit) continue;
+            if (emitted[i]) continue;
+            DbgPrint("  STUCK: %s (phase %s, indegree=%u)\n",
+                     g_Registry[i].Name,
+                     g_PhaseNames[g_Registry[i].Phase],
+                     indegree[i]);
+            for (ULONG k = 0; k < g_Registry[i].DepCount; k++) {
+                DbgPrint("    dep: %s\n", g_Registry[i].Deps[k]);
+            }
+        }
         return STATUS_UNSUCCESSFUL;
     }
-    *OutCount = emitted;
+    *OutCount = nEmitted;
     return STATUS_SUCCESS;
 }
 
@@ -306,8 +318,8 @@ NTSTATUS NTAPI BootRegistryInit(VOID)
     static const CHAR *DepsPs[]   = { "Ob", "Mm" };
     static const CHAR *DepsFs[]   = { "Io" };
     static const CHAR *DepsLpc[]  = { "Ob" };
-    static const CHAR *DepsAhci[] = { "Io", "Partition" };
-    static const CHAR *DepsPartition[] = { "Io" };
+    static const CHAR *DepsAhci[] = { "Io" };
+    static const CHAR *DepsPartition[] = { "Io", "Ahci" };
     static const CHAR *DepsGpu[]  = { "Io" };
     static const CHAR *DepsScm[]  = { "Ob", "Io" };
     static const CHAR *DepsNullDriver[] = { "Io" };
@@ -379,7 +391,7 @@ NTSTATUS NTAPI BootRegistryInit(VOID)
     BootRegisterSubsystemEx("Lpc",        LpcInitSystem, DepsLpc, 1, 1);
     BootRegisterSubsystemEx("Usb",        UsbInitSystem, DepsUsb, 1, 1);
     BootRegisterSubsystemEx("Gpu",        GpuInitializeSubsystem, DepsGpu, 1, 1);
-    BootRegisterSubsystemEx("Ahci",       AhciInitSystem, DepsAhci, 2, 1);
+    BootRegisterSubsystemEx("Ahci",       AhciInitSystem, DepsAhci, 1, 1);
     BootRegisterSubsystemEx("Partition",  PartitionScan, DepsPartition, 1, 1);
     BootRegisterSubsystemEx("Rtw",        RtwInitSystem, DepsRtw, 1, 1);
 
@@ -436,6 +448,15 @@ NTSTATUS NTAPI BootRegistryInit(VOID)
     NTSTATUS s = BootTopoSort(order, &orderCount);
     if (!NT_SUCCESS(s)) {
         DbgPrint("BOOTREGISTRY: topo sort failed: 0x%x\n", s);
+        /* Dump what we have plus what's stuck so the user can debug. */
+        DbgPrint("BOOTREGISTRY: registered subsystems:\n");
+        for (ULONG i = 0; i < BOOT_MAX_SUBSYSTEMS; i++) {
+            if (!g_Registry[i].InUse) continue;
+            DbgPrint("  %s (phase %s, should=%d)\n",
+                     g_Registry[i].Name,
+                     g_PhaseNames[g_Registry[i].Phase],
+                     g_Registry[i].ShouldInit);
+        }
         return s;
     }
     DbgPrint("BOOTREGISTRY: %u subsystems in dependency order:\n", orderCount);
@@ -447,15 +468,23 @@ NTSTATUS NTAPI BootRegistryInit(VOID)
     /* Run them. We don't initialize HAL/Ke here because they were
      * done before the registry was even built (they need to be ready
      * for DbgPrint to work). Anything else in order gets its Init
-     * called. */
+     * called.
+     *
+     * Non-critical subsystems that fail are logged and skipped; the
+     * user can still boot the system and see what's wrong. Critical
+     * subsystems (Phase 0) still halt the kernel. */
     for (ULONG i = 0; i < orderCount; i++) {
         BOOT_SUBSYSTEM_REC *r = &g_Registry[order[i]];
         if (!r->Init) continue;  /* HAL placeholder */
-        if (r->Init()) {
-            DbgPrint("BOOTREGISTRY: %s init FAILED\n", r->Name);
-            return STATUS_UNSUCCESSFUL;
+        NTSTATUS initStatus = r->Init();
+        if (!NT_SUCCESS(initStatus)) {
+            DbgPrint("BOOTREGISTRY: %s init FAILED 0x%08lx (continuing)\n",
+                     r->Name, initStatus);
+            r->Initialized = FALSE;
+            /* Continue - non-critical subsystems can fail gracefully. */
+        } else {
+            r->Initialized = TRUE;
         }
-        r->Initialized = TRUE;
     }
     return STATUS_SUCCESS;
 }

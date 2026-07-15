@@ -80,7 +80,14 @@ VOID NTAPI HalpSerialInit(VOID)
 
 VOID NTAPI HalpSerialPutChar(CHAR C)
 {
-    while (!(READ_PORT_UCHAR(COM1 + 5) & 0x20)) { }
+    /* Bounded wait for COM1 transmit-ready. If the port isn't
+     * responding (e.g. minimal boot environment without proper
+     * init), bail out after ~10000 iterations so the kernel can
+     * continue rather than hanging forever. */
+    int wait = 10000;
+    while (wait-- > 0) {
+        if (READ_PORT_UCHAR(COM1 + 5) & 0x20) break;
+    }
     WRITE_PORT_UCHAR(COM1, (UCHAR)C);
 }
 

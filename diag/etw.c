@@ -79,19 +79,6 @@ NTSTATUS NTAPI EtwInit(VOID)
     RtlZeroMemory(g_Sessions, sizeof(g_Sessions));
     KeInitializeSpinLock(&g_EtwLock);
 
-    /* Register built-in kernel providers */
-    {
-        GUID kernelProv = { 0x9E814AAD, 0x3204, 0x11DF, { 0xBA, 0x48, 0xE0, 0x04, 0x02, 0xC7, 0x7C, 0x8B }};
-        EtwRegisterProvider(&kernelProv, "Kernel");
-        g_Providers[0].Enabled = TRUE;
-        g_Providers[0].EnableMask = 0xFFFFFFFF;
-    }
-    {
-        GUID win32kProv = { 0x8E33188B, 0x6D4E, 0x4A8B, { 0x8C, 0xA4, 0xE8, 0xCF, 0x47, 0x6E, 0x2B, 0xC8 }};
-        EtwRegisterProvider(&win32kProv, "Win32k");
-        g_Providers[1].Enabled = TRUE;
-    }
-
     DbgPrint("ETW: tracing subsystem initialized (%d providers, %d sessions)\n",
              MAX_ETW_PROVIDERS, MAX_ETW_SESSIONS);
     return STATUS_SUCCESS;

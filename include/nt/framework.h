@@ -618,6 +618,8 @@ ULONG    NTAPI OsInstallGetPartitionCount(VOID);
 BOOLEAN  NTAPI OsInstallIsComplete(VOID);
 BOOLEAN  NTAPI OsInstallHasFailed(VOID);
 NTSTATUS NTAPI OsInstallRunTUI(VOID);
+BOOLEAN  NTAPI OsInstallIsComplete(VOID);
+#define OSINSTALL_MAX_PARTITIONS 16
 
 /* ---- Boot Arguments ---- */
 NTSTATUS NTAPI BootArgsParse(PVOID Mb2Info);

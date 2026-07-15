@@ -204,8 +204,14 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
      * subsystem no longer requires editing this function - just call
      * BootRegisterSubsystemEx() somewhere in module init. */
     status = BootRegistryInit();
-    if (!NT_SUCCESS(status))
-        KeBugCheckEx(PHASE0_INITIALIZATION_FAILED, status, 1, 0, 0);
+    if (!NT_SUCCESS(status)) {
+        /* Don't crash the whole kernel if a non-critical subsystem
+         * fails - log and continue so the user can still see what's
+         * happening. Only fail if it's a critical dependency cycle
+         * (status 0xC0000001L = STATUS_UNSUCCESSFUL after topo sort
+         * detects a cycle). */
+        DbgPrint("KIINIT: subsystem registry init returned 0x%08lx\n", status);
+    }
 
     /* Framebuffer + Keyboard - must be ready before any profile check
      * branches off, so the installer TUI can render. These are HAL

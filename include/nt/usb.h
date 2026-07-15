@@ -297,4 +297,13 @@ typedef struct _USBENUM_DEVICE_CONTEXT {
 
 ULONG NTAPI UsbEnumerateDevices(PUSBENUM_DEVICE_CONTEXT DeviceList, ULONG MaxDevices);
 
+/* ---- USB Mass Storage Class (BOT + SCSI) ------------------------------ */
+
+NTSTATUS NTAPI UsbMassInit(VOID);
+ULONG    NTAPI UsbMassGetDiskCount(VOID);
+ULONG64  NTAPI UsbMassGetDiskSize(ULONG DiskNumber);
+VOID     NTAPI UsbMassGetDiskModel(ULONG DiskNumber, PCHAR Buffer, ULONG MaxLen);
+NTSTATUS NTAPI UsbMassReadSectors(ULONG DiskNumber, ULONG64 Lba, ULONG Count, PVOID Buffer);
+NTSTATUS NTAPI UsbMassWriteSectors(ULONG DiskNumber, ULONG64 Lba, ULONG Count, PVOID Buffer);
+
 #endif /* _USB_H_ */

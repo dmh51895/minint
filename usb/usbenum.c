@@ -16,6 +16,8 @@
 #include <nt/ex.h>
 #include <nt/hal.h>
 #include <nt/usb.h>
+#include <nt/usbhcd.h>
+#include <nt/xhci.h>
 #include <nt/rtl.h>
 
 #define TAG_USBENUM 0x554e4245  /* 'USBENUM' */
@@ -37,6 +39,8 @@ extern UHCI_CONTEXT UhciContext;
 #define USB_REQUEST_GET_DESCRIPTOR    0x06
 #define USB_REQUEST_SET_ADDRESS       0x05
 #define USB_REQUEST_SET_CONFIGURATION 0x09
+
+#define USB_CLASS_MASS_STORAGE       0x08
 
 /* ---- USB descriptor structures --------------------------------------- */
 
@@ -613,6 +617,90 @@ static USHORT NTAPI UsbFindKnownDevice(USHORT VendorId, USHORT ProductId)
     return 0xFFFF;
 }
 
+/* ---- xHCI enumeration via HCD abstraction ---------------------------- */
+
+static NTSTATUS XhciGetDesc(UCHAR DevAddr, UCHAR Speed,
+                            UCHAR DescType, USHORT Index,
+                            PVOID Buf, USHORT Len, USHORT *Actual)
+{
+    UCHAR setup[8];
+    setup[0] = 0x80;
+    setup[1] = USB_REQUEST_GET_DESCRIPTOR;
+    setup[2] = (UCHAR)(Index & 0xFF);
+    setup[3] = DescType;
+    setup[4] = 0; setup[5] = 0;
+    setup[6] = (UCHAR)(Len & 0xFF);
+    setup[7] = (UCHAR)(Len >> 8);
+    return USB_HCD_CONTROL_TRANSFER(DevAddr, 0, Speed,
+                                    setup, Buf, Len, TRUE, Actual);
+}
+
+static ULONG UsbEnumerateXhciDevices(PUSBENUM_DEVICE_CONTEXT DeviceList,
+                                     ULONG MaxDevices)
+{
+    PXHCI_CONTEXT Xhci = (PXHCI_CONTEXT)UsbActiveHcd.Context;
+    ULONG Count = 0;
+    if (!Xhci) return 0;
+
+    for (ULONG Slot = 1; Slot <= Xhci->MaxSlots && Count < MaxDevices; Slot++) {
+        PXHCI_DEVICE Dev = &Xhci->Devices[Slot];
+        if (!Dev->Enabled || Dev->Address == 0) continue;
+
+        UCHAR Addr = Dev->Address;
+        UCHAR Speed = Dev->Speed;
+        UCHAR devDesc[18];
+        USHORT actual = 0;
+        NTSTATUS s = XhciGetDesc(Addr, Speed, USB_DESC_TYPE_DEVICE, 0,
+                                 devDesc, 18, &actual);
+        if (!NT_SUCCESS(s) || actual < 18) continue;
+
+        USHORT vid = devDesc[8] | (devDesc[9] << 8);
+        USHORT pid = devDesc[10] | (devDesc[11] << 8);
+
+        UCHAR bulkIn = 0, bulkOut = 0, ifClass = 0;
+        UCHAR cfgDesc[256];
+        actual = 0;
+        s = XhciGetDesc(Addr, Speed, USB_DESC_TYPE_CONFIGURATION, 0,
+                        cfgDesc, sizeof(cfgDesc), &actual);
+        if (NT_SUCCESS(s) && actual >= 9) {
+            for (USHORT off = 0; off + 1 < actual; ) {
+                UCHAR bLen = cfgDesc[off];
+                UCHAR bType = cfgDesc[off + 1];
+                if (bLen == 0) break;
+                if (bType == 0x04 && bLen >= 9)
+                    ifClass = cfgDesc[off + 5];
+                else if (bType == 0x05 && bLen >= 7) {
+                    UCHAR epAddr = cfgDesc[off + 2];
+                    UCHAR epAttr = cfgDesc[off + 3];
+                    if ((epAttr & 0x03) == 2) {
+                        if (epAddr & 0x80) bulkIn = epAddr & 0x0F;
+                        else               bulkOut = epAddr & 0x0F;
+                    }
+                }
+                off += bLen;
+            }
+        }
+
+        if (ifClass != USB_CLASS_MASS_STORAGE) continue;
+        if (!bulkIn && !bulkOut) continue;
+
+        PUSBENUM_DEVICE_CONTEXT ctx = &DeviceList[Count];
+        RtlZeroMemory(ctx, sizeof(*ctx));
+        ctx->Present = TRUE;
+        ctx->DeviceAddress = Addr;
+        ctx->VendorId = vid;
+        ctx->ProductId = pid;
+        ctx->BulkInPipe = (USBD_PIPE_HANDLE)(ULONG_PTR)bulkIn;
+        ctx->BulkOutPipe = (USBD_PIPE_HANDLE)(ULONG_PTR)bulkOut;
+        ctx->MaxPacketSize = 512;
+
+        DbgPrint("USBENUM-xHCI: slot %lu addr %u class %02x bulk_in=%u bulk_out=%u\n",
+                 Slot, Addr, ifClass, bulkIn, bulkOut);
+        Count++;
+    }
+    return Count;
+}
+
 /* ---- Public API ----------------------------------------------------- */
 
 /*
@@ -636,9 +724,15 @@ ULONG NTAPI UsbEnumerateDevices(PUSBENUM_DEVICE_CONTEXT DeviceList,
     if (!DeviceList || MaxDevices == 0)
         return 0;
 
+    /* xHCI path: enumerate via HCD abstraction. */
+    if (UsbActiveHcd.Initialized && !UhciContext.Initialized)
+    {
+        return UsbEnumerateXhciDevices(DeviceList, MaxDevices);
+    }
+
     if (!UhciContext.Initialized)
     {
-        DbgPrint("USBENUM: UHCI not initialized\n");
+        DbgPrint("USBENUM: no USB HCD initialized\n");
         return 0;
     }
 

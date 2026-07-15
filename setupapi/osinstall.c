@@ -49,6 +49,7 @@ typedef struct _OSINSTALL_DISK {
     ULONG SectorCount;
     CHAR ModelName[40];
     BOOLEAN InUse;
+    UCHAR BusType;      /* 0=AHCI, 1=USB, 2=Virtual */
 } OSINSTALL_DISK;
 
 typedef struct _OSINSTALL_PARTITION {
@@ -82,27 +83,49 @@ typedef struct _OSINSTALL_STATE {
 
 static OSINSTALL_STATE g_Install;
 
-/* ---- Disk enumeration via AHCI ---- */
+/* ---- Disk enumeration via AHCI + USB ---- */
 
 static ULONG OsInstallEnumerateDisks(OSINSTALL_DISK *Disks, ULONG MaxCount)
 {
     ULONG count = 0;
-    /* Query the AHCI driver for connected disks. */
-    extern ULONG AhciGetDiskCount(VOID);
-    extern ULONG64 AhciGetDiskSize(ULONG DiskNumber);
-    extern VOID AhciGetDiskModel(ULONG DiskNumber, PCHAR Buffer, ULONG MaxLen);
 
-    ULONG ahciCount = AhciGetDiskCount();
-    for (ULONG i = 0; i < ahciCount && count < MaxCount; i++) {
-        Disks[count].DiskNumber = i;
-        Disks[count].DiskSize = AhciGetDiskSize(i);
-        Disks[count].SectorSize = OSINSTALL_SECTOR_SIZE;
-        Disks[count].SectorCount = (ULONG)(Disks[count].DiskSize / OSINSTALL_SECTOR_SIZE);
-        Disks[count].InUse = TRUE;
-        AhciGetDiskModel(i, Disks[count].ModelName, sizeof(Disks[count].ModelName));
-        count++;
+    /* AHCI disks (internal SATA / NVMe) */
+    {
+        extern ULONG AhciGetDiskCount(VOID);
+        extern ULONG64 AhciGetDiskSize(ULONG DiskNumber);
+        extern VOID AhciGetDiskModel(ULONG DiskNumber, PCHAR Buffer, ULONG MaxLen);
+        ULONG ahciCount = AhciGetDiskCount();
+        for (ULONG i = 0; i < ahciCount && count < MaxCount; i++) {
+            Disks[count].DiskNumber = i;
+            Disks[count].DiskSize = AhciGetDiskSize(i);
+            Disks[count].SectorSize = OSINSTALL_SECTOR_SIZE;
+            Disks[count].SectorCount = (ULONG)(Disks[count].DiskSize / OSINSTALL_SECTOR_SIZE);
+            Disks[count].InUse = TRUE;
+            Disks[count].BusType = 0; /* AHCI */
+            AhciGetDiskModel(i, Disks[count].ModelName, sizeof(Disks[count].ModelName));
+            count++;
+        }
     }
-    /* If no AHCI disks, model a single virtual disk for RAM-disk installs. */
+
+    /* USB mass storage (portable SSDs, flash drives, HDD enclosures) */
+    {
+        extern ULONG NTAPI UsbMassGetDiskCount(VOID);
+        extern ULONG64 NTAPI UsbMassGetDiskSize(ULONG);
+        extern VOID NTAPI UsbMassGetDiskModel(ULONG, PCHAR, ULONG);
+        ULONG usbCount = UsbMassGetDiskCount();
+        for (ULONG i = 0; i < usbCount && count < MaxCount; i++) {
+            Disks[count].DiskNumber = i;
+            Disks[count].DiskSize = UsbMassGetDiskSize(i);
+            Disks[count].SectorSize = OSINSTALL_SECTOR_SIZE;
+            Disks[count].SectorCount = (ULONG)(Disks[count].DiskSize / OSINSTALL_SECTOR_SIZE);
+            Disks[count].InUse = TRUE;
+            Disks[count].BusType = 1; /* USB */
+            UsbMassGetDiskModel(i, Disks[count].ModelName, sizeof(Disks[count].ModelName));
+            count++;
+        }
+    }
+
+    /* If no physical disks, model a single virtual disk for RAM-disk installs. */
     if (count == 0) {
         Disks[0].DiskNumber = 0;
         Disks[0].DiskSize = 16ULL * 1024 * 1024 * 1024;
@@ -110,10 +133,15 @@ static ULONG OsInstallEnumerateDisks(OSINSTALL_DISK *Disks, ULONG MaxCount)
         Disks[0].SectorCount = (ULONG)(Disks[0].DiskSize / OSINSTALL_SECTOR_SIZE);
         RtlCopyMemory(Disks[0].ModelName, "MinNT Virtual Disk", 19);
         Disks[0].InUse = TRUE;
+        Disks[0].BusType = 2; /* Virtual */
         count = 1;
     }
     return count;
 }
+
+/* Forward declarations for disk I/O dispatch (AHCI/USB) */
+static NTSTATUS OsInstallDiskRead(ULONG64 Lba, ULONG Count, PVOID Buffer);
+static NTSTATUS OsInstallDiskWrite(ULONG64 Lba, ULONG Count, PVOID Buffer);
 
 /* ---- Partition enumeration ---- */
 
@@ -121,11 +149,8 @@ static ULONG OsInstallEnumeratePartitions(ULONG DiskNumber,
                                            OSINSTALL_PARTITION *Parts, ULONG MaxCount)
 {
     ULONG count = 0;
-    /* Read the MBR partition table from sector 0 of the disk. */
-    extern NTSTATUS AhciReadSectors(ULONG DiskNumber, ULONG64 Lba, ULONG Count, PVOID Buffer);
-
     UCHAR mbr[OSINSTALL_MBR_SIZE];
-    NTSTATUS s = AhciReadSectorsEx(DiskNumber, 0, 1, mbr);
+    NTSTATUS s = OsInstallDiskRead(0, 1, mbr);
     if (!NT_SUCCESS(s)) {
         /* Model a single full-disk partition. */
         if (MaxCount > 0) {
@@ -166,14 +191,39 @@ static ULONG OsInstallEnumeratePartitions(ULONG DiskNumber,
 
 /* ---- Formatting ---- */
 
+/* ---- Unified disk I/O: dispatches to AHCI or USB by BusType ---- */
+
+static NTSTATUS OsInstallDiskRead(ULONG64 Lba, ULONG Count, PVOID Buffer)
+{
+    ULONG sel = g_Install.SelectedDisk;
+    if (sel >= g_Install.DiskCount) return STATUS_INVALID_PARAMETER;
+    ULONG dn = g_Install.Disks[sel].DiskNumber;
+    if (g_Install.Disks[sel].BusType == 1) {
+        extern NTSTATUS NTAPI UsbMassReadSectors(ULONG, ULONG64, ULONG, PVOID);
+        return UsbMassReadSectors(dn, Lba, Count, Buffer);
+    }
+    extern NTSTATUS NTAPI AhciReadSectorsEx(ULONG, ULONG64, ULONG, PVOID);
+    return AhciReadSectorsEx(dn, Lba, Count, Buffer);
+}
+
+static NTSTATUS OsInstallDiskWrite(ULONG64 Lba, ULONG Count, PVOID Buffer)
+{
+    ULONG sel = g_Install.SelectedDisk;
+    if (sel >= g_Install.DiskCount) return STATUS_INVALID_PARAMETER;
+    ULONG dn = g_Install.Disks[sel].DiskNumber;
+    if (g_Install.Disks[sel].BusType == 1) {
+        extern NTSTATUS NTAPI UsbMassWriteSectors(ULONG, ULONG64, ULONG, PVOID);
+        return UsbMassWriteSectors(dn, Lba, Count, Buffer);
+    }
+    extern NTSTATUS NTAPI AhciWriteSectorsEx(ULONG, ULONG64, ULONG, PVOID);
+    return AhciWriteSectorsEx(dn, Lba, Count, Buffer);
+}
+
+/* ---- Format ---- */
+
 static NTSTATUS DoFormat(ULONG DiskNumber, ULONG PartitionIndex,
                                           PCHAR ProgressMessage)
 {
-    /* Format the selected partition as FAT32. We write a minimal
-     * FAT32 boot sector, two FATs, and a root directory. */
-    extern NTSTATUS AhciWriteSectors(ULONG DiskNumber, ULONG64 Lba, ULONG Count, PVOID Buffer);
-    extern NTSTATUS AhciReadSectors(ULONG DiskNumber, ULONG64 Lba, ULONG Count, PVOID Buffer);
-
     if (DiskNumber >= g_Install.DiskCount) return STATUS_INVALID_PARAMETER;
     if (PartitionIndex >= g_Install.PartitionCount) return STATUS_INVALID_PARAMETER;
 
@@ -250,7 +300,7 @@ static NTSTATUS DoFormat(ULONG DiskNumber, ULONG PartitionIndex,
     bootSector[510] = 0x55; bootSector[511] = 0xAA;
 
     /* Write boot sector. */
-    NTSTATUS s = AhciWriteSectorsEx(DiskNumber, p->StartSector, 1, bootSector);
+    NTSTATUS s = OsInstallDiskWrite(p->StartSector, 1, bootSector);
     if (!NT_SUCCESS(s)) return s;
 
     /* Zero out the FAT (first FAT starts at reserved+1). */
@@ -259,21 +309,21 @@ static NTSTATUS DoFormat(ULONG DiskNumber, ULONG PartitionIndex,
     RtlZeroMemory(zeroBuf, sizeof(zeroBuf));
     /* Write the first FAT entry (media descriptor). */
     zeroBuf[0] = 0xF8; zeroBuf[1] = 0xFF; zeroBuf[2] = 0xFF; zeroBuf[3] = 0x0F;
-    AhciWriteSectorsEx(DiskNumber, fatStart, 1, zeroBuf);
+    OsInstallDiskWrite(fatStart, 1, zeroBuf);
     /* Zero the rest of the first FAT. */
     RtlZeroMemory(zeroBuf, sizeof(zeroBuf));
     for (ULONG i = 1; i < sectorsPerFat; i++) {
-        AhciWriteSectorsEx(DiskNumber, fatStart + i, 1, zeroBuf);
+        OsInstallDiskWrite(fatStart + i, 1, zeroBuf);
     }
     /* Zero the second FAT. */
     ULONG fat2Start = fatStart + sectorsPerFat;
     for (ULONG i = 0; i < sectorsPerFat; i++) {
-        AhciWriteSectorsEx(DiskNumber, fat2Start + i, 1, zeroBuf);
+        OsInstallDiskWrite(fat2Start + i, 1, zeroBuf);
     }
     /* Zero the root directory cluster. */
     ULONG rootStart = fat2Start + sectorsPerFat;
     for (ULONG i = 0; i < 8; i++) {
-        AhciWriteSectorsEx(DiskNumber, rootStart + i, 1, zeroBuf);
+        OsInstallDiskWrite(rootStart + i, 1, zeroBuf);
     }
 
     RtlCopyMemory(p->FileSystem, "FAT32", 6);
@@ -383,12 +433,10 @@ static NTSTATUS DoCopyFiles(ULONG DiskNumber, ULONG PartitionIndex,
 static NTSTATUS DoBootloader(ULONG DiskNumber, PCHAR ProgressMessage)
 {
     RtlCopyMemory(ProgressMessage, "Installing bootloader...", 25);
-    extern NTSTATUS AhciReadSectors(ULONG DiskNumber, ULONG64 Lba, ULONG Count, PVOID Buffer);
-    extern NTSTATUS AhciWriteSectors(ULONG DiskNumber, ULONG64 Lba, ULONG Count, PVOID Buffer);
 
     /* Read the current MBR. */
     UCHAR mbr[OSINSTALL_MBR_SIZE];
-    NTSTATUS s = AhciReadSectorsEx(DiskNumber, 0, 1, mbr);
+    NTSTATUS s = OsInstallDiskRead(0, 1, mbr);
     if (!NT_SUCCESS(s)) {
         RtlCopyMemory(ProgressMessage, "Error: cannot read MBR", 23);
         return s;
@@ -431,7 +479,7 @@ static NTSTATUS DoBootloader(ULONG DiskNumber, PCHAR ProgressMessage)
     stage1[0x1C0] = 0x01;
     stage1[0x1C1] = 0x01;
 
-    s = AhciWriteSectorsEx(DiskNumber, 0, 1, stage1);
+    s = OsInstallDiskWrite(0, 1, stage1);
     if (!NT_SUCCESS(s)) {
         RtlCopyMemory(ProgressMessage, "Error: cannot write MBR", 24);
         return s;

@@ -169,12 +169,13 @@ static NTSTATUS BootTopoSort(ULONG *OutOrder, ULONG *OutCount)
         for (ULONG k = 0; k < g_Registry[i].DepCount; k++) {
             const CHAR *depName = g_Registry[i].Deps[k];
             BOOT_SUBSYSTEM_REC *dep = BootFindRec(depName);
-            /* If the dep is registered and should init, count it as
-             * a dependency we must satisfy. If the dep is registered
-             * but NOT in this profile, that's still a dependency we
-             * must satisfy - we expect the dep will be initialized
-             * elsewhere (e.g. core HAL always runs). */
-            if (dep) d++;
+            /* Only count deps that are ALSO in this boot profile.
+             * If a dep isn't in the profile (ShouldInit=FALSE), it
+             * will never be emitted, so counting it would deadlock
+             * the topo sort — the dependent would wait forever for
+             * a dep that never runs. Treat off-profile deps as
+             * already satisfied (they're skipped by design). */
+            if (dep && dep->ShouldInit) d++;
         }
         indegree[i] = d;
     }
@@ -258,7 +259,7 @@ NTSTATUS NTAPI BootRegistryInit(VOID)
     extern NTSTATUS NTAPI GpuInitializeSubsystem(VOID);
     extern NTSTATUS NTAPI AhciInitSystem(VOID);
     extern NTSTATUS NTAPI PartitionScan(VOID);
-    extern NTSTATUS NTAPI DriverEntry(VOID);
+    extern NTSTATUS NTAPI DriverEntry(PVOID DriverObject, PVOID RegistryPath);
     extern NTSTATUS NTAPI BootChainInit(VOID);
     extern NTSTATUS NTAPI OsInstallInit(VOID);
     extern NTSTATUS NTAPI ScmAutoStart(VOID);
@@ -371,6 +372,7 @@ NTSTATUS NTAPI BootRegistryInit(VOID)
      *      a non-(VOID) signature. ---- */
     NTSTATUS NTAPI WrapCcInit(VOID) { CcInitSystem(); return STATUS_SUCCESS; }
     NTSTATUS NTAPI WrapKdInit(VOID) { return KdInit(6, 0, 0x100000); }
+    NTSTATUS NTAPI WrapWin32kInit(VOID) { return DriverEntry(NULL, NULL); }
 
     /* ---- Phase 0: Core HAL/Kernel (placeholder; HAL is already running). ---- */
     BootRegisterSubsystemEx("HAL", NULL, NULL, 0, 0);
@@ -436,7 +438,7 @@ NTSTATUS NTAPI BootRegistryInit(VOID)
     BootRegisterSubsystemEx("CtrlName",    ControllerNameInit, DepsCtrlName, 1, 2);
 
     /* ---- Phase 3: GUI + Boot chain ---- */
-    BootRegisterSubsystemEx("Win32k",     DriverEntry, DepsWin32k, 1, 3);
+    BootRegisterSubsystemEx("Win32k",     WrapWin32kInit, DepsWin32k, 1, 3);
     BootRegisterSubsystemEx("BootChain",  BootChainInit, DepsBootChain, 2, 3);
 
     /* Mark profile-allowed status. */

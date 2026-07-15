@@ -51,7 +51,7 @@ win32k/win32k.o win32k/gdikernel.o win32k/usermsg.o win32k/userwnd.o \
           win32k/winmgr.o win32k/winable.o win32k/validate.o win32k/winwhere.o \
           win32k/update.o win32k/settings.o \
           win32k/d3d12/d3d12.o win32k/d3d12/samples/d3d12_triangle.o \
-           usb/uhci.o usb/usbclass.o usb/usbenum.o usb/xhci.o usb/xhci_enum.o usb/hid_kbd.o usb/hid_mouse.o \
+            usb/uhci.o usb/usbclass.o usb/usbenum.o usb/xhci.o usb/xhci_enum.o usb/hid_kbd.o usb/hid_mouse.o usb/usb_mass.o \
            drivers/gpu/gpu.o drivers/gpu/amd/amdgpu.o drivers/gpu/intel/intelgpu.o drivers/gpu/nvidia/nvidia.o drivers/gpu/virtio/virtio_gpu.o drivers/gpu/sw/swgpu.o \
 ndis/ndis.o ndis/miniport.o ndis/connections.o \
            rtw/rtw_usb.o \
@@ -125,11 +125,10 @@ setupldr.elf: $(SETUPLDR_OBJS) setupldr_linker.ld
 	@echo "== Setup Loader built =="
 	@size $@ || true
 
-iso: minint.elf setupldr.elf
+iso: minint.elf
 	mkdir -p isoroot/boot/grub
 	cp minint.elf isoroot/boot/
-	cp setupldr.elf isoroot/boot/
-	printf 'set timeout=10\nset default=0\n\ninsmod all_video\nset gfxmode=1920x1080x32,1024x768x32,1024x768,800x600,auto\nset gfxpayload=keep\n\nmenuentry "MinNT - Run from Disk (Live Mode)" {\n  echo "Loading MinNT Live..."\n  multiboot2 /boot/minint.elf\n  boot\n}\nmenuentry "MinNT - Install to Hard Drive" {\n  echo "Loading MinNT Setup Loader..."\n  multiboot2 /boot/setupldr.elf\n  boot\n}\nmenuentry "MinNT - Safe Mode (Minimal Drivers)" {\n  echo "Loading MinNT Safe Mode..."\n  multiboot2 /boot/minint.elf /safemode\n  boot\n}\nmenuentry "MinNT - Safe Mode with Networking" {\n  echo "Loading MinNT Safe Mode + Network..."\n  multiboot2 /boot/minint.elf /safemode /network\n  boot\n}\nmenuentry "MinNT - Debug Mode (Serial Output)" {\n  echo "Loading MinNT (Debug)..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /debug\n  boot\n}\nmenuentry "MinNT - Text Mode Terminal" {\n  echo "Loading MinNT Terminal..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /terminal\n  boot\n}\nmenuentry "MinNT - Recovery Console" {\n  echo "Loading MinNT Recovery..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /recovery\n  boot\n}\nmenuentry "Reboot" {\n  reboot\n}\nmenuentry "Power Off" {\n  halt\n}\n' \
+	printf 'set timeout=10\nset default=0\n\ninsmod all_video\nset gfxmode=1920x1080x32,1024x768x32,1024x768,800x600,auto\nset gfxpayload=keep\n\nmenuentry "MinNT - Run from Disk (Live Mode)" {\n  echo "Loading MinNT Live..."\n  multiboot2 /boot/minint.elf\n  boot\n}\nmenuentry "MinNT - Install to Hard Drive" {\n  echo "Loading MinNT Installer..."\n  multiboot2 /boot/minint.elf /install\n  boot\n}\nmenuentry "MinNT - Safe Mode (Minimal Drivers)" {\n  echo "Loading MinNT Safe Mode..."\n  multiboot2 /boot/minint.elf /safemode\n  boot\n}\nmenuentry "MinNT - Safe Mode with Networking" {\n  echo "Loading MinNT Safe Mode + Network..."\n  multiboot2 /boot/minint.elf /safemode /network\n  boot\n}\nmenuentry "MinNT - Debug Mode (Serial Output)" {\n  echo "Loading MinNT (Debug)..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /debug\n  boot\n}\nmenuentry "MinNT - Text Mode Terminal" {\n  echo "Loading MinNT Terminal..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /terminal\n  boot\n}\nmenuentry "MinNT - Recovery Console" {\n  echo "Loading MinNT Recovery..."\n  set gfxpayload=text\n  multiboot2 /boot/minint.elf /recovery\n  boot\n}\nmenuentry "Reboot" {\n  reboot\n}\nmenuentry "Power Off" {\n  halt\n}\n' \
     > isoroot/boot/grub/grub.cfg
 	grub-mkrescue -o minint.iso isoroot
 

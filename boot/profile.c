@@ -175,12 +175,28 @@ NTSTATUS NTAPI BootProfileInit(VOID)
     BootDefineProfile(BootProfileTerminal, "Terminal");
     BootDefineProfile(BootProfileDebug,    "Debug");
 
-    /* INSTALL profile: minimal set for OS installation. */
+    /* INSTALL profile: minimal set for OS installation.
+     *
+     * We only initialize the subsystems the installer actually
+     * needs: core exec (HAL, Ke, Mm, Ex, Ob), I/O + disk + FS,
+     * framebuffer + keyboard for the TUI, and the installer
+     * modules. Everything else (Network, Shell, WMI, Audio, GPU,
+     * Win32k, BootChain, etc.) is skipped.
+     *
+     * The dependency closure must be complete: if Io depends on Ob
+     * and Ob depends on Ex, all three must be listed here or the
+     * topo sort will skip them and the dependent will crash at
+     * runtime when it calls into uninitialized services. */
     BootProfileAddRequired(BootProfileInstall, "HAL");
     BootProfileAddRequired(BootProfileInstall, "Ke");
     BootProfileAddRequired(BootProfileInstall, "Mm");
+    BootProfileAddRequired(BootProfileInstall, "Ex");
+    BootProfileAddRequired(BootProfileInstall, "Ob");
     BootProfileAddRequired(BootProfileInstall, "Io");
+    BootProfileAddRequired(BootProfileInstall, "NullDriver");
     BootProfileAddRequired(BootProfileInstall, "Ahci");
+    BootProfileAddRequired(BootProfileInstall, "Usb");
+    BootProfileAddRequired(BootProfileInstall, "Partition");
     BootProfileAddRequired(BootProfileInstall, "Fs");
     BootProfileAddRequired(BootProfileInstall, "Framebuffer");
     BootProfileAddRequired(BootProfileInstall, "Keyboard");

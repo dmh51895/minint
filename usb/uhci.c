@@ -282,6 +282,9 @@ NTSTATUS NTAPI UsbInitSystem(VOID)
                 Status = XhciRegisterHcd(NULL);  /* PciDevice parameter for future use */
                 if (NT_SUCCESS(Status)) {
                     DbgPrint("USB: xHCI initialized successfully\n");
+                    /* Initialize USB mass storage (BOT + SCSI) */
+                    extern NTSTATUS NTAPI UsbMassInit(VOID);
+                    UsbMassInit();
                     return STATUS_SUCCESS;
                 }
                 DbgPrint("USB: xHCI init failed, trying other controllers...\n");
@@ -301,8 +304,12 @@ NTSTATUS NTAPI UsbInitSystem(VOID)
                 continue;
 
             Status = UsbInitUhciController(Bus, Device, 0);
-            if (NT_SUCCESS(Status))
+            if (NT_SUCCESS(Status)) {
+                /* Initialize USB mass storage (BOT + SCSI) */
+                extern NTSTATUS NTAPI UsbMassInit(VOID);
+                UsbMassInit();
                 return STATUS_SUCCESS;
+            }
         }
     }
 

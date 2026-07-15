@@ -217,8 +217,8 @@ typedef struct _XHCI_TRB {
         struct { ULONG64 Rsvd; } EnableSlot;
         ULONG64 Generic;
     } Data;
-    ULONG32 TrbStatus;      /* Transfer length, TD size, etc */
-    ULONG32 Control;        /* Cycle bit, TRB type, flags */
+    ULONG32 Control;        /* DWord 2: Cycle bit, TRB type, Completion Code */
+    ULONG32 TrbStatus;      /* DWord 3: TRB-specific (Slot ID, Transfer Length, etc.) */
 } XHCI_TRB, *PXHCI_TRB;
 
 /* TRB Control word bit fields */
@@ -233,14 +233,14 @@ typedef struct _XHCI_TRB {
 #define TRB_CTRL_TYPE(t)            (((t) & 0x3F) << 10)
 #define TRB_CTRL_GET_TYPE(c)        (((c) >> 10) & 0x3F)
 
-/* TRB Status word fields */
+/* Event TRB: Completion Code lives in DWord 2 bits 31:24 (Control word) */
+#define TRB_EVENT_COMP_CODE(s)      (((s) >> 24) & 0xFF)
+
+/* Transfer TRB: Status word fields (DWord 3 / TrbStatus) */
 #define TRB_STATUS_LENGTH(l)        (((l) & 0x1FFFF) << 0)
 #define TRB_STATUS_GET_LENGTH(s)    (((s) >> 0) & 0x1FFFF)
 #define TRB_STATUS_TD_SIZE(s)       (((s) & 0x1F) << 17)
 #define TRB_STATUS_GET_TD_SIZE(s)   (((s) >> 17) & 0x1F)
-
-/* Event TRB fields */
-#define TRB_EVENT_COMP_CODE(s)      (((s) >> 24) & 0xFF)
 
 /* ---- xHCI Context Structures -------------------------------------------- */
 

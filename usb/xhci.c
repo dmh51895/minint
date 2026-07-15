@@ -33,6 +33,9 @@ static BOOLEAN XhciInitialized = FALSE;
 /* Global active HCD - defined here */
 USB_HCD UsbActiveHcd;
 
+/* Defined in xhci_enum.c */
+extern VOID XhciScanAndEnumeratePorts(PXHCI_CONTEXT Xhci);
+
 /* Forward declarations */
 static VOID XhciReadMsiCapability(PXHCI_CONTEXT Xhci, ULONG Offset);
 static NTSTATUS XhciEnableMsi(PXHCI_CONTEXT Xhci);
@@ -81,7 +84,13 @@ VOID XhciWritePort(PXHCI_CONTEXT Xhci, ULONG Port, ULONG Offset, ULONG Value)
 FORCEINLINE VOID XhciRingDoorbell(PXHCI_CONTEXT Xhci, UCHAR SlotId, UCHAR Target)
 {
     volatile ULONG *db = (volatile ULONG *)((PUCHAR)Xhci->DoorbellRegs + (SlotId * 4));
-    *db = (ULONG)Target << 8;  /* Target = endpoint (0 for command ring) */
+    ULONG val;
+    if (SlotId == 0)
+        val = 0x0100;  /* Cmd ring: Target=0, StreamID=1 — must be non-zero */
+    else
+        val = (ULONG)Target;  /* bits 7:0 = Target */
+    *db = val;
+    __sync_synchronize();
 }
 
 /* ---- Controller Initialization ------------------------------------------- */
@@ -229,12 +238,25 @@ NTSTATUS XhciSetupCommandRing(PXHCI_CONTEXT Xhci)
     Xhci->CmdRingPhys = MmGetPhysicalAddress(Xhci->CmdRing);
     Xhci->CmdEnqueueIdx = 0;
     Xhci->CmdRingCycle = 1;
+
+    /* Place a Link TRB at the end of the ring to make it circular.
+     * The Link TRB points back to the beginning of the ring. */
+    {
+        PXHCI_TRB LinkTrb = &Xhci->CmdRing[XHCI_TRB_RING_SIZE - 1];
+        LinkTrb->Data.Link.RingSegmentPointer = Xhci->CmdRingPhys;
+        LinkTrb->Control = TRB_CTRL_TYPE(TRB_TYPE_LINK) | TRB_CTRL_CYCLE;
+    }
     
     DbgPrint("XHCI: Command ring at VA=%p PA=%p\n", Xhci->CmdRing, (PVOID)(ULONG_PTR)Xhci->CmdRingPhys);
     
     /* Program CRCR */
     ULONG64 Crcr = Xhci->CmdRingPhys | XHCI_CRCR_RCS;  /* Ring Cycle State = 1 */
+    DbgPrint("XHCI: CRCR setting: CmdRingPhys=0x%p RCS=1\n", (PVOID)(ULONG_PTR)Xhci->CmdRingPhys);
     *(volatile ULONG64 *)((PUCHAR)Xhci->OperationalRegs + 0x18) = Crcr;
+    
+    /* Read back to verify */
+    ULONG64 CrcrRead = *(volatile ULONG64 *)((PUCHAR)Xhci->OperationalRegs + 0x18);
+    DbgPrint("XHCI: CRCR readback=0x%016llx\n", CrcrRead);
     
     DbgPrint("XHCI: Command ring initialized\n");
     return STATUS_SUCCESS;
@@ -262,6 +284,13 @@ NTSTATUS XhciSetupEventRing(PXHCI_CONTEXT Xhci)
     Xhci->EventRingPhys = MmGetPhysicalAddress(Xhci->EventRing);
     Xhci->EventDequeueIdx = 0;
     Xhci->EventRingCycle = 1;
+
+    /* Place a Link TRB at the end of the event ring for circular wrap */
+    {
+        PXHCI_TRB LinkTrb = &Xhci->EventRing[XHCI_TRB_RING_SIZE - 1];
+        LinkTrb->Data.Link.RingSegmentPointer = Xhci->EventRingPhys;
+        LinkTrb->Control = TRB_CTRL_TYPE(TRB_TYPE_LINK) | TRB_CTRL_CYCLE;
+    }
     
     DbgPrint("XHCI: Event ring at VA=%p PA=%p\n", Xhci->EventRing, (PVOID)(ULONG_PTR)Xhci->EventRingPhys);
     
@@ -280,7 +309,7 @@ NTSTATUS XhciSetupEventRing(PXHCI_CONTEXT Xhci)
     
     /* Setup ERST entry */
     Xhci->Erst->RingSegmentBase = Xhci->EventRingPhys;
-    Xhci->Erst->RingSegmentSize = XHCI_TRB_RING_SIZE;
+    Xhci->Erst->RingSegmentSize = XHCI_TRB_RING_SIZE - 1;  /* Exclude Link TRB */
     Xhci->Erst->RsvdZ = 0;
     
     DbgPrint("XHCI: ERST at VA=%p PA=%p\n", Xhci->Erst, (PVOID)(ULONG_PTR)Xhci->ErstPhys);
@@ -289,22 +318,35 @@ NTSTATUS XhciSetupEventRing(PXHCI_CONTEXT Xhci)
     RtsOff = XhciReadCap(Xhci, 0x18);  /* RTSOFF */
     Xhci->RuntimeRegs = (PUCHAR)Xhci->CapabilityRegs + RtsOff;
     
-    /* Interrupter 0 registers */
-    IntrRegs = (PXHCI_INTR_REGS)Xhci->RuntimeRegs;
+    DbgPrint("XHCI: RTSOFF=0x%x, RuntimeRegs=%p CapRegs=%p\n",
+             RtsOff, Xhci->RuntimeRegs, Xhci->CapabilityRegs);
     
-    /* Disable interrupts initially */
-    IntrRegs->Iman = 0;  /* Clear IE (Interrupt Enable) */
+    /* Interrupter 0 registers (at RuntimeBase + 0x20) */
+    IntrRegs = (PXHCI_INTR_REGS)((PUCHAR)Xhci->RuntimeRegs + 0x20);
+    DbgPrint("XHCI: IntrRegs=%p, ERSTBA will go to %p\n",
+             IntrRegs, &IntrRegs->Erstba);
+    
+    /* Enable interrupts so controller may generate events */
+    IntrRegs->Iman = XHCI_IMAN_IE;  /* Set Interrupt Enable */
     
     /* Program ERST size (1 segment) */
     IntrRegs->Erstsz = 1;
     
     /* Program ERST base address */
     *(volatile ULONG64 *)&IntrRegs->Erstba = Xhci->ErstPhys;
-    
-    /* Set dequeue pointer */
+
+    /* Initialize ERDP to start of event ring */
     *(volatile ULONG64 *)&IntrRegs->Erdp = Xhci->EventRingPhys;
     
-    DbgPrint("XHCI: Event ring initialized (ERSTSZ=%d)\n", IntrRegs->Erstsz);
+    DbgPrint("XHCI: ERSTBA=0x%p ERDP=0x%p ERSTsz=%d\n",
+             (PVOID)(ULONG_PTR)Xhci->ErstPhys,
+             (PVOID)(ULONG_PTR)Xhci->EventRingPhys,
+             IntrRegs->Erstsz);
+    DbgPrint("XHCI: ERSTBA readback=0x%llx ERDP readback=0x%llx\n",
+             *(volatile ULONG64 *)&IntrRegs->Erstba,
+             *(volatile ULONG64 *)&IntrRegs->Erdp);
+    DbgPrint("XHCI: ERST[0] base=0x%llx size=%u\n",
+             Xhci->Erst->RingSegmentBase, Xhci->Erst->RingSegmentSize);
     return STATUS_SUCCESS;
 }
 
@@ -357,7 +399,7 @@ NTSTATUS XhciStartController(PXHCI_CONTEXT Xhci)
     
     /* Set RS (Run/Stop) */
     Cmd = XhciReadOp(Xhci, 0x00);  /* USBCMD */
-    Cmd |= XHCI_CMD_RS;
+    Cmd |= XHCI_CMD_RS | XHCI_CMD_INTE | XHCI_CMD_HSEE;
     XhciWriteOp(Xhci, 0x00, Cmd);
     
     /* Wait for HCH (Halted) to clear */
@@ -519,16 +561,14 @@ NTSTATUS XhciSubmitCommand(PXHCI_CONTEXT Xhci, PXHCI_TRB Trb)
     
     /* Advance enqueue pointer */
     Xhci->CmdEnqueueIdx++;
-    if (Xhci->CmdEnqueueIdx >= XHCI_TRB_RING_SIZE) {
+    /* Stop before the Link TRB (last entry) to preserve it */
+    if (Xhci->CmdEnqueueIdx >= XHCI_TRB_RING_SIZE - 1) {
         Xhci->CmdEnqueueIdx = 0;
         Xhci->CmdRingCycle ^= 1;
     }
-    
     KeReleaseSpinLockFromDpcLevel(&Xhci->Lock);
-    
-    /* Ring doorbell */
+    __sync_synchronize();
     XhciRingDoorbell(Xhci, 0, 0);
-    
     return STATUS_SUCCESS;
 }
 
@@ -552,13 +592,14 @@ NTSTATUS XhciPollEventRing(PXHCI_CONTEXT Xhci, PXHCI_TRB EventTrb, ULONG Timeout
             
             /* Advance dequeue pointer */
             Xhci->EventDequeueIdx++;
-            if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE) {
+            /* Skip Link TRB at end of ring */
+            if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE - 1) {
                 Xhci->EventDequeueIdx = 0;
                 Xhci->EventRingCycle ^= 1;
             }
             
             /* Update ERDP */
-            PXHCI_INTR_REGS IntrRegs = (PXHCI_INTR_REGS)Xhci->RuntimeRegs;
+            PXHCI_INTR_REGS IntrRegs = (PXHCI_INTR_REGS)((PUCHAR)Xhci->RuntimeRegs + 0x20);
             ULONG64 Erdp = Xhci->EventRingPhys + (Xhci->EventDequeueIdx * sizeof(XHCI_TRB));
             *(volatile ULONG64 *)&IntrRegs->Erdp = Erdp;
             
@@ -588,16 +629,22 @@ NTSTATUS XhciEnableSlot(PXHCI_CONTEXT Xhci, PUCHAR OutSlotId)
         return Status;
     
     Status = XhciPollEventRing(Xhci, &EventTrb, 1000);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status)) {
+        PXHCI_TRB er0 = &Xhci->EventRing[0];
+        ULONG64 CrcrRead = *(volatile ULONG64 *)((PUCHAR)Xhci->OperationalRegs + 0x18);
+        ULONG UsbCmd = XhciReadOp(Xhci, 0x00);
+        DbgPrint("XHCI: Poll timeout - ER[0]=%08x CRCR=%016llx USBCMD=%08x\n",
+                 er0->Control, CrcrRead, UsbCmd);
         return Status;
+    }
     
-    UCHAR CompCode = TRB_EVENT_COMP_CODE(EventTrb.TrbStatus);
+    UCHAR CompCode = TRB_EVENT_COMP_CODE(EventTrb.Control);
     if (CompCode != TRB_SUCCESS) {
         DbgPrint("XHCI: Enable Slot failed (code=%d)\n", CompCode);
         return STATUS_UNSUCCESSFUL;
     }
     
-    *OutSlotId = (UCHAR)(EventTrb.Data.Generic >> 24);
+    *OutSlotId = (UCHAR)(EventTrb.TrbStatus & 0xFF);
     DbgPrint("XHCI: Slot %d enabled\n", *OutSlotId);
     
     return STATUS_SUCCESS;
@@ -709,7 +756,7 @@ NTSTATUS XhciAddressDeviceCommand(PXHCI_CONTEXT Xhci, UCHAR SlotId, UCHAR Port,
     
     /* Setup Slot Context in Input Context */
     SlotCtx = &InputCtx->Slot;
-    SlotCtx->ContextEntries = 1;
+    SlotCtx->ContextEntries = 2;  /* Slot(0) + EP0(1) */
     SlotCtx->Speed = Speed;
     SlotCtx->RootHubPort = Port + 1;  /* xHCI uses 1-based port numbers */
     
@@ -742,7 +789,7 @@ NTSTATUS XhciAddressDeviceCommand(PXHCI_CONTEXT Xhci, UCHAR SlotId, UCHAR Port,
         return Status;
     }
     
-    UCHAR CompCode = TRB_EVENT_COMP_CODE(EventTrb.TrbStatus);
+    UCHAR CompCode = TRB_EVENT_COMP_CODE(EventTrb.Control);
     MmFreeContiguousMemory(InputCtx);
     
     if (CompCode != TRB_SUCCESS) {
@@ -866,7 +913,7 @@ NTSTATUS NTAPI XhciControlTransfer(PVOID Context, UCHAR DevAddr, UCHAR Ep, UCHAR
         
         if (TrbCycle == Xhci->EventRingCycle) {
             /* Process event */
-            UCHAR CompCode = TRB_EVENT_COMP_CODE(Trb->TrbStatus);
+            UCHAR CompCode = TRB_EVENT_COMP_CODE(Trb->Control);
             UCHAR TrbType = TRB_CTRL_GET_TYPE(Trb->Control);
             
             if (CompCode == TRB_SUCCESS) {
@@ -880,9 +927,11 @@ NTSTATUS NTAPI XhciControlTransfer(PVOID Context, UCHAR DevAddr, UCHAR Ep, UCHAR
                 DbgPrint("XHCI: Control transfer complete (%lu bytes)\n", *Actual);
                 
                 /* Advance event ring */
-                Xhci->EventDequeueIdx = (Xhci->EventDequeueIdx + 1) % XHCI_TRB_RING_SIZE;
-                if (Xhci->EventDequeueIdx == 0)
+                Xhci->EventDequeueIdx++;
+                if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE - 1) {
+                    Xhci->EventDequeueIdx = 0;
                     Xhci->EventRingCycle ^= 1;
+                }
                 
                 /* Update ERDP */
                 PXHCI_INTR_REGS IntrRegs = (PXHCI_INTR_REGS)Xhci->RuntimeRegs;
@@ -895,17 +944,21 @@ NTSTATUS NTAPI XhciControlTransfer(PVOID Context, UCHAR DevAddr, UCHAR Ep, UCHAR
                 DbgPrint("XHCI: Control transfer failed (code=%d)\n", CompCode);
                 
                 /* Advance event ring */
-                Xhci->EventDequeueIdx = (Xhci->EventDequeueIdx + 1) % XHCI_TRB_RING_SIZE;
-                if (Xhci->EventDequeueIdx == 0)
+                Xhci->EventDequeueIdx++;
+                if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE - 1) {
+                    Xhci->EventDequeueIdx = 0;
                     Xhci->EventRingCycle ^= 1;
+                }
                 
                 return STATUS_UNSUCCESSFUL;
             }
             
             /* Advance event ring for non-transfer events */
-            Xhci->EventDequeueIdx = (Xhci->EventDequeueIdx + 1) % XHCI_TRB_RING_SIZE;
-            if (Xhci->EventDequeueIdx == 0)
+            Xhci->EventDequeueIdx++;
+            if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE - 1) {
+                Xhci->EventDequeueIdx = 0;
                 Xhci->EventRingCycle ^= 1;
+            }
         }
         
         KeStallExecutionProcessor(100);
@@ -987,7 +1040,7 @@ NTSTATUS NTAPI XhciBulkTransfer(PVOID Context, UCHAR DevAddr, UCHAR Ep, UCHAR Sp
         BOOLEAN TrbCycle = (Trb->Control & TRB_CTRL_CYCLE) ? 1 : 0;
         
         if (TrbCycle == Xhci->EventRingCycle) {
-            UCHAR CompCode = TRB_EVENT_COMP_CODE(Trb->TrbStatus);
+            UCHAR CompCode = TRB_EVENT_COMP_CODE(Trb->Control);
             
             if (CompCode == TRB_SUCCESS || CompCode == TRB_SHORT_PACKET) {
                 ULONG Transferred = TRB_STATUS_GET_LENGTH(Trb->TrbStatus);
@@ -999,9 +1052,11 @@ NTSTATUS NTAPI XhciBulkTransfer(PVOID Context, UCHAR DevAddr, UCHAR Ep, UCHAR Sp
                 DbgPrint("XHCI: Bulk transfer complete (%lu bytes, code=%d)\n", 
                           *Actual, CompCode);
                 
-                Xhci->EventDequeueIdx = (Xhci->EventDequeueIdx + 1) % XHCI_TRB_RING_SIZE;
-                if (Xhci->EventDequeueIdx == 0)
+                Xhci->EventDequeueIdx++;
+                if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE - 1) {
+                    Xhci->EventDequeueIdx = 0;
                     Xhci->EventRingCycle ^= 1;
+                }
                 
                 PXHCI_INTR_REGS IntrRegs = (PXHCI_INTR_REGS)Xhci->RuntimeRegs;
                 ULONG64 Erdp = Xhci->EventRingPhys + (Xhci->EventDequeueIdx * sizeof(XHCI_TRB));
@@ -1011,16 +1066,20 @@ NTSTATUS NTAPI XhciBulkTransfer(PVOID Context, UCHAR DevAddr, UCHAR Ep, UCHAR Sp
             } else if (CompCode != 0) {
                 DbgPrint("XHCI: Bulk transfer failed (code=%d)\n", CompCode);
                 
-                Xhci->EventDequeueIdx = (Xhci->EventDequeueIdx + 1) % XHCI_TRB_RING_SIZE;
-                if (Xhci->EventDequeueIdx == 0)
+                Xhci->EventDequeueIdx++;
+                if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE - 1) {
+                    Xhci->EventDequeueIdx = 0;
                     Xhci->EventRingCycle ^= 1;
+                }
                 
                 return STATUS_UNSUCCESSFUL;
             }
             
-            Xhci->EventDequeueIdx = (Xhci->EventDequeueIdx + 1) % XHCI_TRB_RING_SIZE;
-            if (Xhci->EventDequeueIdx == 0)
+            Xhci->EventDequeueIdx++;
+            if (Xhci->EventDequeueIdx >= XHCI_TRB_RING_SIZE - 1) {
+                Xhci->EventDequeueIdx = 0;
                 Xhci->EventRingCycle ^= 1;
+            }
         }
         
         KeStallExecutionProcessor(100);
@@ -1251,6 +1310,7 @@ NTSTATUS NTAPI XhciRegisterHcd(PVOID PciDevice)
     /* Set up Doorbell registers */
     ULONG DbOff = XhciReadCap(Xhci, 0x14);
     Xhci->DoorbellRegs = (PUCHAR)Va + DbOff;
+    DbgPrint("XHCI: DBOFF=0x%x, DoorbellRegs=%p\n", DbOff, Xhci->DoorbellRegs);
     
     Xhci->Initialized = TRUE;
     Xhci->Running = TRUE;
@@ -1265,7 +1325,10 @@ NTSTATUS NTAPI XhciRegisterHcd(PVOID PciDevice)
     
     DbgPrint("XHCI: Controller initialized and registered as active HCD\n");
     DbgPrint("XHCI: Ready for enumeration on %d ports\n", Xhci->MaxPorts);
-    
+
+    /* Scan ports and enumerate connected devices */
+    XhciScanAndEnumeratePorts(Xhci);
+
     return STATUS_SUCCESS;
 }
 

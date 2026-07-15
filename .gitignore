@@ -1,0 +1,38 @@
+# Object files
+*.o
+
+# Kernel binary
+minint.elf
+
+# ISO image
+minint.iso
+
+# Build directory
+isoroot/
+
+# LwIP build artifacts
+tcpip/lwip_src/*.o
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Binary user apps
+user/user_app.bin
+user/user_app_bin.c
+user/*.o
+
+# Firmware blobs
+firmware/*.o
+
+# RTC (Real-Time Clock)
+rtc/
+
+# Ventoy logs
+ventoy-1.0.96/
+
+# Build output
+minint.elf.efi

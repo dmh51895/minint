@@ -76,7 +76,10 @@ static VOID NTAPI SpoolerThread(PVOID Context)
             didWork = TRUE;
         }
 
-        if (!didWork) KeStallExecutionProcessor(50000); /* idle wait */
+        if (!didWork) {
+            KeStallExecutionProcessor(10000);
+            KiDispatchNextThread();
+        }
     }
 }
 

@@ -246,12 +246,12 @@ typedef struct _XHCI_TRB {
 
 /* Slot Context (1st context in a device's context array) */
 typedef struct _XHCI_SLOT_CONTEXT {
-    ULONG32 RouteString   : 20;
-    ULONG32 Speed         : 4;
-    ULONG32 RsvdZ         : 1;
-    ULONG32 Mtt           : 1;
-    ULONG32 Hub           : 1;
-    ULONG32 ContextEntries : 5;
+    ULONG32 RouteString   : 20;  /* Bits 19:0 */
+    ULONG32 Speed         : 4;   /* Bits 23:20 */
+    ULONG32 Mtt           : 1;   /* Bit 24: Multi-TT */
+    ULONG32 Hub           : 1;   /* Bit 25: Hub */
+    ULONG32 ContextEntries : 5;  /* Bits 30:26 */
+    ULONG32 RsvdZ         : 1;   /* Bit 31: RsvdZ */
     USHORT  MaxExitLatency;
     UCHAR   RootHubPort;
     UCHAR   NumHubPorts;

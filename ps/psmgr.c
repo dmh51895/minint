@@ -57,7 +57,6 @@ VOID NTAPI KiReadyThread(PKTHREAD Thread)
 
 VOID NTAPI KiDispatchNextThread(VOID)
 {
-dispatch_loop:
     KIRQL irql;
     PKTHREAD Old, New;
     PKPRCB Prcb = KeGetCurrentPrcb();
@@ -66,11 +65,9 @@ dispatch_loop:
 
     KeAcquireSpinLock(&KiDispatcherLock, &irql);
     if (IsListEmpty(&KiReadyListHead)) {
-        KeReleaseSpinLock(&KiDispatcherLock, &irql);
-        /* Nothing to run - HLT to wait for next interrupt */
-        __asm__ __volatile__("hlt");
-        /* Loop back to re-acquire and re-check */
-        goto dispatch_loop;
+        KeReleaseSpinLock(&KiDispatcherLock, irql);
+        /* Nothing to run — return so the caller can HLT/idle */
+        return;
     }
 
     Old = Prcb->CurrentThread;

@@ -248,6 +248,7 @@ static VOID NTAPI TimerScanThread(PVOID Context)
 
         /* No timers fired - sleep for the polling period. */
         KeStallExecutionProcessor(TIMER_THREAD_PERIOD_MS * 1000);
+        KiDispatchNextThread();
     }
 
     DbgPrint("TIMER: scan thread exiting\n");

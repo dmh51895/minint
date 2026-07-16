@@ -1,38 +1,28 @@
-# Object files
+# QEMU testing images
+*.img
+*.qcow2
+*.raw
+*.iso
+
+# Build artifacts
 *.o
+*.elf
+*.bin
+*.map
+*.iso
+*.EFI
 
-# Kernel binary
-minint.elf
-
-# ISO image
-minint.iso
-
-# Build directory
+# Ventoy / ISO tools
+ventoy-*/
+ventoy-install/
 isoroot/
 
-# LwIP build artifacts
-tcpip/lwip_src/*.o
-
-# Editor/IDE files
+# Editor/IDE
 .vscode/
 .idea/
 *.swp
-*.swo
 *~
 
-# Binary user apps
-user/user_app.bin
-user/user_app_bin.c
-user/*.o
-
-# Firmware blobs
-firmware/*.o
-
-# RTC (Real-Time Clock)
-rtc/
-
-# Ventoy logs
-ventoy-1.0.96/
-
-# Build output
-minint.elf.efi
+# OS
+.DS_Store
+Thumbs.db

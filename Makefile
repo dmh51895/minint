@@ -16,14 +16,14 @@ ASFLAGS := -m64 -ffreestanding -fno-pic -c
 LDFLAGS := -n -T linker.ld -z noexecstack -z max-page-size=0x1000 --no-relax
 
 OBJS := boot/mbentry.o \
-         boot/chain/chain.o \
-         boot/chain/cpl.o boot/chain/admin.o boot/chain/admin2.o \
-         boot/chain/smss.o boot/chain/winlogon.o boot/chain/explorer.o \
-         boot/chain/smss_real/sminit.o boot/chain/smss_real/smss.o boot/chain/smss_real/smsubsys.o \
-         boot/chain/smss_real/smsessn.o boot/chain/smss_real/smutil.o \
-         boot/chain/smss_real/smloop.o boot/chain/smss_real/smsbapi.o \
-         boot/chain/smss_real/crashdmp.o boot/chain/smss_real/pagefile.o \
-         ke/trap.o ke/ctxswap.o ke/idt.o ke/irql.o ke/bugcheck.o ke/dispatch.o ke/timer.o minint/ke/smp.o minint/ke/aptramp.o minint/ke/apic.o \
+          boot/chain/chain.o \
+          boot/chain/cpl.o boot/chain/admin.o boot/chain/admin2.o \
+          boot/chain/smss.o boot/chain/winlogon.o boot/chain/explorer.o \
+          boot/chain/smss_real/sminit.o boot/chain/smss_real/smss.o boot/chain/smss_real/smsubsys.o \
+          boot/chain/smss_real/smsessn.o boot/chain/smss_real/smutil.o \
+          boot/chain/smss_real/smloop.o boot/chain/smss_real/smsbapi.o \
+          boot/chain/smss_real/crashdmp.o boot/chain/smss_real/pagefile.o \
+          ke/trap.o ke/ctxswap.o ke/idt.o ke/irql.o ke/bugcheck.o ke/dispatch.o ke/timer.o minint/ke/smp.o minint/ke/aptramp.o minint/ke/apic.o \
           ke/syscall.o ke/services.o ke/pe.o ke/exe.o ke/exports/kernel32_exports.o ke/exports/ntdll_exports.o ke/exports/user32_exports.o ke/exports/gdi32_exports.o ke/exports/advapi32_exports.o ke/exports/ole32_exports.o ke/exports/dxgi_exports.o ke/exports/d3dcompiler_exports.o ke/exports/shell32_exports.o ke/exports/ws2_32_exports.o \
          hal/hal.o hal/fb.o hal/kbd.o hal/mouse.o hal/mb2fb.o rtl/rtl.o rtl/rtlsupp.o \
          lib/font/ttf.o \
@@ -104,14 +104,14 @@ minint.elf: $(OBJS) linker.ld
 # Built as a separate binary so the installer doesn't drag the full
 # kernel (with win32k, network, apps) into the install boot.
 SETUPLDR_OBJS := boot/setupldr_entry.o boot/setupldr.o \
-                 hal/hal.o hal/fb.o hal/kbd.o hal/mouse.o hal/mb2fb.o \
-                 rtl/rtl.o rtl/rtlsupp.o \
-                 ex/pool.o \
-                 boot/profile.o boot/bootargs.o \
-                 drivers/ata/ahci.o \
-                 fs/fs.o fs/fat32.o \
-                 setupapi/osinstall.o \
-                 init/kiinit_minimal.o
+                  hal/hal.o hal/fb.o hal/kbd.o hal/mouse.o hal/mb2fb.o \
+                  rtl/rtl.o rtl/rtlsupp.o \
+                  ex/pool.o \
+                  boot/profile.o boot/bootargs.o \
+                  drivers/ata/ahci.o \
+                  fs/fs.o fs/fat32.o \
+                  setupapi/osinstall.o \
+                  init/kiinit_minimal.o
 
 # Minimal kiinit for setupldr (only the parts setupldr needs)
 init/kiinit_minimal.c:

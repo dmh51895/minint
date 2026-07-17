@@ -213,13 +213,33 @@ DECLSPEC_NORETURN VOID NTAPI KiSystemStartup(PVOID BootInfo)
         DbgPrint("KIINIT: subsystem registry init returned 0x%08lx\n", status);
     }
 
-    /* Framebuffer + Keyboard - must be ready before any profile check
-     * branches off, so the installer TUI can render. These are HAL
-     * primitives, not profile-gated subsystems. */
+    /* GPU initialization FIRST - so it can set up VRAM before framebuffer */
+    if (BootProfileAllowsSubsystem("GPU")) {
+        DbgPrint("INIT: initializing GPU subsystem...\n");
+        NTSTATUS gpuStatus = GpuInitializeSubsystem();
+        if (NT_SUCCESS(gpuStatus)) {
+            DbgPrint("INIT: GPU initialized, %u device(s) found\n", GpuDeviceCount);
+        } else {
+            DbgPrint("INIT: GPU init returned 0x%08lx, falling back to software renderer\n", gpuStatus);
+        }
+    }
+    
+    /* Framebuffer + Keyboard - must be ready after GPU */
     if (BootProfileAllowsSubsystem("Framebuffer")) {
         MB2_FRAMEBUFFER_INFO FbInfo;
         status = HalpParseMb2Framebuffer(BootInfo, &FbInfo);
         if (NT_SUCCESS(status) && FbInfo.Valid) {
+            /* Try to use GPU's framebuffer if available */
+            if (PrimaryGpu && PrimaryGpu->Initialized) {
+                DbgPrint("FB: using GPU framebuffer at PA=%p\n", (PVOID)(ULONG_PTR)PrimaryGpu->VramPhys);
+                /* Map GPU VRAM as framebuffer */
+                FbInfo.Address = PrimaryGpu->VramVirt;
+                FbInfo.Width = PrimaryGpu->Display.Crtcs[PrimaryGpu->Display.PrimaryCrtc].Width;
+                FbInfo.Height = PrimaryGpu->Display.Crtcs[PrimaryGpu->Display.PrimaryCrtc].Height;
+                FbInfo.Pitch = FbInfo.Width * 4;  /* 32-bit */
+                FbInfo.Bpp = 32;
+                DbgPrint("FB: GPU FB %ux%u@32bpp\n", FbInfo.Width, FbInfo.Height);
+            }
             HalpFbInit(FbInfo.Address, FbInfo.Width, FbInfo.Height, FbInfo.Pitch, FbInfo.Bpp);
             extern VOID NTAPI HalpFbConsoleInit(ULONG Width, ULONG Height);
             HalpFbConsoleInit(FbInfo.Width, FbInfo.Height);

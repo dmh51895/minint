@@ -13,6 +13,7 @@
 #include <nt/hal.h>
 #include <nt/gpu.h>
 #include <nt/rtl.h>
+#include <string.h>
 
 #define TAG_AMDGPU 'AMDG'
 

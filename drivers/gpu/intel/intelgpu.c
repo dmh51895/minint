@@ -11,6 +11,7 @@
 #include <nt/hal.h>
 #include <nt/gpu.h>
 #include <nt/rtl.h>
+#include <string.h>
 
 #define TAG_INTEL 'INTL'
 
@@ -150,45 +151,57 @@ NTSTATUS NTAPI IntelGpuInitialize(PGPU_DEVICE Device)
              (PVOID)(ULONG_PTR)Device->VramPhys, Device->VramVirt, Device->VramSize);
     
     /* ===== DRAW TEST PATTERN FOR REAL HARDWARE ===== */
-    DbgPrint("INTEL: Drawing test pattern to framebuffer...\n");
-    {
-        PULONG Fb = (PULONG)Device->VramVirt;
-        ULONG Width = 1920;
-        ULONG Height = 1080;
+    /* Only draw the test pattern if the framebuffer is actually being used */
+    if (HalpFbIsActive()) {
+        DbgPrint("INTEL: Drawing test pattern to framebuffer...\n");
         
-        for (ULONG y = 0; y < Height; y++) {
-            for (ULONG x = 0; x < Width; x++) {
-                ULONG color;
-                
-                /* Color bars for real display */
-                if (y < Height / 8) {
-                    color = 0xFFFFFFFF;  /* White */
-                } else if (y < 2 * Height / 8) {
-                    color = 0xFFFFFF00;  /* Yellow */
-                } else if (y < 3 * Height / 8) {
-                    color = 0xFF00FFFF;  /* Cyan */
-                } else if (y < 4 * Height / 8) {
-                    color = 0xFF00FF00;  /* Green */
-                } else if (y < 5 * Height / 8) {
-                    color = 0xFFFF00FF;  /* Magenta */
-                } else if (y < 6 * Height / 8) {
-                    color = 0xFFFF0000;  /* Red */
-                } else if (y < 7 * Height / 8) {
-                    color = 0xFF0000FF;  /* Blue */
-                } else {
-                    color = 0xFF000000;  /* Black */
+        extern volatile ULONG *HalpFbGetBase(VOID);
+        extern ULONG HalpFbGetWidth(VOID);
+        extern ULONG HalpFbGetHeight(VOID);
+        
+        volatile ULONG *Fb = HalpFbGetBase();
+        ULONG Width = HalpFbGetWidth();
+        ULONG Height = HalpFbGetHeight();
+        
+        if (Fb && Width > 0 && Height > 0) {
+            for (ULONG y = 0; y < Height; y++) {
+                for (ULONG x = 0; x < Width; x++) {
+                    ULONG color;
+                    
+                    /* Color bars for real display */
+                    if (y < Height / 8) {
+                        color = 0xFFFFFFFF;  /* White */
+                    } else if (y < 2 * Height / 8) {
+                        color = 0xFFFFFF00;  /* Yellow */
+                    } else if (y < 3 * Height / 8) {
+                        color = 0xFF00FFFF;  /* Cyan */
+                    } else if (y < 4 * Height / 8) {
+                        color = 0xFF00FF00;  /* Green */
+                    } else if (y < 5 * Height / 8) {
+                        color = 0xFFFF00FF;  /* Magenta */
+                    } else if (y < 6 * Height / 8) {
+                        color = 0xFFFF0000;  /* Red */
+                    } else if (y < 7 * Height / 8) {
+                        color = 0xFF0000FF;  /* Blue */
+                    } else {
+                        color = 0xFF000000;  /* Black */
+                    }
+                    
+                    /* Checkerboard pattern */
+                    if ((x / 64 + y / 64) % 2 == 0) {
+                        color = ~color;
+                    }
+                    
+                    Fb[y * Width + x] = color;
                 }
-                
-                /* Checkerboard pattern */
-                if ((x / 64 + y / 64) % 2 == 0) {
-                    color = ~color;
-                }
-                
-                Fb[y * Width + x] = color;
             }
+            
+            DbgPrint("INTEL: Test pattern drawn to framebuffer %ux%u!\n", Width, Height);
+        } else {
+            DbgPrint("INTEL: Warning - framebuffer not active, skipping test pattern\n");
         }
-        
-        DbgPrint("INTEL: Test pattern drawn!\n");
+    } else {
+        DbgPrint("INTEL: Framebuffer not active, skipping test pattern\n");
     }
     /* ===== END TEST PATTERN ===== */
     

@@ -26,3 +26,6 @@ isoroot/
 # OS
 .DS_Store
 Thumbs.db
+
+# Large test executables (too big for GitHub)
+EXES/*.exe

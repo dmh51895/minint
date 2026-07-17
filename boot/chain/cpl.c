@@ -409,6 +409,12 @@ static BOOLEAN CplHandleMouse(SHORT mx, SHORT my, BOOLEAN leftDown, BOOLEAN left
                 g_ActiveDialog->Active = FALSE;
             } else if (c->Type == CTRL_BUTTON && c->Id == g_ActiveDialog->CancelButtonId) {
                 g_ActiveDialog->Active = FALSE;
+            } else if (c->Type == CTRL_BUTTON && c->Id == 100) {
+                /* Browse button in Personalization dialog */
+                extern NTSTATUS NTAPI FpOpen(const CHAR *StartPath);
+                FpOpen("C:\\");
+                /* Set default to Bliss wallpaper path */
+                /* The textbox will be updated when dialog is redrawn */
             }
             return TRUE;
         }
@@ -974,7 +980,64 @@ static VOID Personalize_OnApply(VOID)
     pic[pi] = 0;
     SettingsSetUserProfilePicture((PCWSTR)pic);
 
-    DbgPrint("CPL: personalization applied (wallpaper=%s theme=%s)\n", wbuf, theme);
+    /* === ACTUALLY APPLY THE SETTINGS === */
+    
+    /* 1. Load and render wallpaper */
+    extern NTSTATUS NTAPI WallpaperLoad(const CHAR *Path);
+    extern NTSTATUS NTAPI WallpaperSetMode(ULONG Mode);
+    extern NTSTATUS NTAPI WallpaperRender(VOID);
+    extern NTSTATUS NTAPI WallpaperInit(VOID);
+    
+    static BOOLEAN wallpaperInited = FALSE;
+    if (!wallpaperInited) {
+        WallpaperInit();
+        wallpaperInited = TRUE;
+    }
+    
+    /* Load wallpaper if path is not empty */
+    if (wbuf[0]) {
+        WallpaperLoad(wbuf);
+        WallpaperSetMode(2); /* Stretch mode */
+        WallpaperRender();
+        DbgPrint("CPL: wallpaper loaded and rendered: %s\n", wbuf);
+    }
+    
+    /* 2. Apply theme */
+    extern NTSTATUS NTAPI UxThemeSetActiveByName(const CHAR *Name);
+    if (theme[0]) {
+        UxThemeSetActiveByName(theme);
+        DbgPrint("CPL: theme applied: %s\n", theme);
+    }
+    
+    /* 3. Update user profile */
+    extern NTSTATUS NTAPI ProfileSetWallpaper(const CHAR *Path);
+    extern NTSTATUS NTAPI ProfileSetTheme(const CHAR *ThemeName);
+    extern NTSTATUS NTAPI ProfileSetAccentColor(ULONG Color);
+    extern NTSTATUS NTAPI ProfileSetProfilePicture(const CHAR *Path);
+    extern NTSTATUS NTAPI ProfileSave(VOID);
+    
+    if (wbuf[0]) ProfileSetWallpaper(wbuf);
+    if (theme[0]) ProfileSetTheme(theme);
+    
+    /* Parse accent color from hex string */
+    if (accent[0] == '#') {
+        ULONG color = 0;
+        for (int i = 1; i < 7 && accent[i]; i++) {
+            CHAR c = accent[i];
+            color <<= 4;
+            if (c >= '0' && c <= '9') color |= (c - '0');
+            else if (c >= 'a' && c <= 'f') color |= (c - 'a' + 10);
+            else if (c >= 'A' && c <= 'F') color |= (c - 'A' + 10);
+        }
+        ProfileSetAccentColor(color);
+    }
+    
+    if (pic[0]) ProfileSetProfilePicture(pic);
+    
+    /* Save profile to registry */
+    ProfileSave();
+    
+    DbgPrint("CPL: personalization applied (wallpaper=%s theme=%s accent=%s)\n", wbuf, theme, accent);
 }
 
 static VOID CplOpenPersonalize(VOID)
@@ -987,6 +1050,14 @@ static VOID CplOpenPersonalize(VOID)
     CHAR wpStr[260]; ULONG wpi = 0;
     while (wp[wpi] && wpi < 259) { wpStr[wpi] = (CHAR)wp[wpi]; wpi++; }
     wpStr[wpi] = 0;
+    
+    /* If no wallpaper set, default to Bliss */
+    if (wpStr[0] == 0) {
+        const CHAR *bliss = "C:\\Windows\\Web\\Wallpaper\\Bliss\\windows_xp_bliss-wide.jpg";
+        ULONG k = 0;
+        while (bliss[k] && k < 259) { wpStr[k] = bliss[k]; k++; }
+        wpStr[k] = 0;
+    }
 
     WCHAR theme[64]; theme[0] = 0;
     SettingsGetThemeName(theme, 64);

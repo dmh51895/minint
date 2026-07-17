@@ -32,7 +32,7 @@ OBJS := boot/mbentry.o \
          ex/pool.o ex/lookaside.o ex/pushlock.o ex/eresource.o ex/workitem.o ex/rundown.o ob/obmgr.o ps/psmgr.o \
           io/iomgr.o cm/cm.o cm/cmpers.o se/se.o se/scm.o fs/fs.o fs/fat32.o fs/partition.o fs/ntfs.o fs/recycle.o fs/reparse.o fs/vss.o fs/exfat.o fs/iso9660.o fs/filter.o ole32/comreg.o lpc/lpc.o rpc/rpc.o wmi/wmi.o acpi/acpi.o \
           io/pnp.o debug/kd.o \
-          shell/ns.o shell/safeusb.o shell/sync.o display/topo.o diag/etw.o diag/reliability.o print/spooler.o \
+           shell/ns.o shell/safeusb.o shell/sync.o shell/exec_handler.o shell/msi_handler.o shell/script_handler.o display/topo.o diag/etw.o diag/reliability.o print/spooler.o \
           boot/safemode.o boot/bootcfg.o boot/menu.o boot/bootargs.o boot/profile.o boot/registry.o \
           input/touch.o input/ime.o input/gamepad.o input/steam_input.o input/remap.o input/touchpad.o input/ctrlname.o input/hid.o input/tsf.o \
           mm/quotas.o mm/profiles.o \
@@ -40,14 +40,14 @@ OBJS := boot/mbentry.o \
            audio/engine.o ps/apc.o ps/job.o ps/fiber.o \
            admin/mmc.o \
            apps/notepad.o apps/calculator.o apps/terminal.o apps/taskmgr.o apps/properties.o \
-           wine/wine.o wine/wineboot.o winsxs/fusion.o com/apartment.o \
+            wine/wine.o wine/wineboot.o wine/pe_loader.o winsxs/fusion.o com/apartment.o \
            ndk/ndk_shim.o \
-win32k/win32k.o win32k/gdikernel.o win32k/usermsg.o win32k/userwnd.o \
+ win32k/win32k.o win32k/gdikernel.o win32k/usermsg.o win32k/userwnd.o win32k/uxtheme.o win32k/wallpaper/wallpaper.o win32k/icons/icon_loader.o win32k/file_picker.o win32k/profile/user_profile.o \
           win32k/atom.o win32k/clipboard.o win32k/base.o win32k/capture.o \
           win32k/desktop.o win32k/dirs.o win32k/dragdrop.o win32k/event.o \
           win32k/ex.o win32k/icons.o win32k/keyboard.o win32k/libmgmt.o \
           win32k/loadbits.o win32k/logon.o win32k/queue.o win32k/movesizs.o \
-          win32k/profile.o win32k/syscmd.o win32k/taskman.o win32k/timers.o \
+          win32k/syscmd.o win32k/taskman.o win32k/timers.o \
           win32k/winmgr.o win32k/winable.o win32k/validate.o win32k/winwhere.o \
           win32k/update.o win32k/settings.o \
           win32k/d3d12/d3d12.o win32k/d3d12/samples/d3d12_triangle.o \
